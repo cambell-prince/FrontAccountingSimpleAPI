@@ -46,6 +46,42 @@ class TestEnvironment
         }
     }
 
+	public static function createSupplier($client, $ref, $name)
+	{
+		$response = $client->post('/modules/api/suppliers/', array(
+			'headers' => TestEnvironment::headers(),
+			'body' => array(
+				// supplier_id
+				'supp_name' => $name,
+				'supp_ref' => $ref,
+				'address' => 'address',
+				// supp_address
+				// gst_no
+				// contact
+				// supp_account_no
+				// website
+				// bank_account
+				'curr_code' => 'USD',
+				'payment_terms' => '1',
+				// tax_included
+				// dimension_id
+				// dimension2_id
+				// tax_group_id
+				'credit_limit' => '1000',
+				// purchase_account
+				// payable_account
+				// payment_discount_account
+				'notes' => 'notes'
+			// inactive
+						)
+		));
+		$result = $response->getStatusCode();
+		if ($result != 201) {
+			throw new \Exception('Create supplier failed', $result);
+		}
+	}
+	
+	
     public static function createItem($client, $id, $description)
     {
         $response = $client->post('/modules/api/inventory/', array(

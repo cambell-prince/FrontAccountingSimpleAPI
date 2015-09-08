@@ -467,6 +467,39 @@ $rest->group('/sales', function () use ($rest) {
     });
 });
 // ------------------------------- Sales --------------------------------
+// ------------------------------- Purchases --------------------------------
+$rest->container->singleton('purchases', function() {
+    return new Purchases();
+});
+$rest->group('/purchases', function () use($rest)
+{
+    // Get Purchases Header and Details
+    $rest->get('/:trans_no/:trans_type', function ($trans_no, $trans_type) use($rest)
+    {
+        $rest->purchases->getById($rest, $trans_no, $trans_type);
+    });
+    // Insert Purchases
+    $rest->post('/', function () use($rest)
+    {
+        $rest->purchases->post($rest);
+    });
+    // Edit Purchases
+    $rest->put('/:trans_no/:trans_type', function ($trans_no, $trans_type) use($rest)
+    {
+        $rest->purchases->put($rest, $trans_no, $trans_type);
+    });
+    // Cancel Purchases
+    $rest->delete('/:branch_id/:uuid', function ($branch_id, $uuid) use($rest)
+    {
+        $rest->purchases->delete($rest, $branch_id, $uuid);
+    });
+    // All Purchases
+    $rest->get('/:trans_type/', function ($trans_type) use($rest)
+    {
+        $rest->purchases->get($rest, $trans_type);
+    });
+});
+// ------------------------------- Purchases --------------------------------
 
 // ----------------------------- Dimensions -----------------------------
 $rest->container->singleton('dimensions', function () {
