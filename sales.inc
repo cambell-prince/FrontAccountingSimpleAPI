@@ -293,7 +293,16 @@ function sales_add() {
 
 	$cart->customer_id	= $info['customer_id'];
 	$cart->Branch				= $info['branch_id'];
-	$cart->sales_type		= $info['sales_type'];
+	// set_sales_type() also sets tax_included and factor; assigning
+	// ->sales_type alone left tax_included empty, which credit notes write
+	// straight into an integer column.
+	$salesType = get_sales_type($info['sales_type']);
+	$cart->set_sales_type(
+		$salesType['id'],
+		$salesType['sales_type'],
+		$salesType['tax_included'],
+		$salesType['factor']
+	);
 
 	// FrontAccounting writes $cart->payment into sales_orders.payment_terms,
 	// another integer column. The cart is filled by property assignment rather
