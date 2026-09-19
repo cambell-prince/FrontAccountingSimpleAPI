@@ -1,4 +1,13 @@
 <?php
+// Slim 2.x still calls this; it was removed in PHP 8.0 and magic quotes are
+// always off there, so false is the correct answer.
+if (!function_exists('get_magic_quotes_gpc')) {
+    function get_magic_quotes_gpc(): bool
+    {
+        return false;
+    }
+}
+
 use FAAPI\Inventory;
 use FAAPI\InventoryLocations;
 use FAAPI\Category;
