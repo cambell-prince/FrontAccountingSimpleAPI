@@ -524,5 +524,17 @@ $rest->group('/journal', function () use ($rest) {
 });
 // ------------------------------ Journal -------------------------------
 
+// ------------------------------ Payments ------------------------------
+$rest->container->singleton('payments', function () {
+    return new \FAAPI\Payments();
+});
+$rest->group('/payments', function () use ($rest) {
+    // Add a customer payment, optionally allocated to one document
+    $rest->post('/', function () use ($rest) {
+        $rest->payments->post($rest);
+    });
+});
+// ------------------------------ Payments ------------------------------
+
 // Init API
 $rest->run();
