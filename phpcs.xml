@@ -18,6 +18,13 @@
          FA. Not ours to restyle. -->
     <exclude-pattern>tests/data/*</exclude-pattern>
 
+    <!-- Test classes are global on purpose: PHPUnit 4 includes them from the
+         suite directory rather than autoloading them, and a namespace would buy
+         nothing. -->
+    <rule ref="PSR1.Classes.ClassDeclaration.MissingNamespace">
+        <exclude-pattern>tests/*</exclude-pattern>
+    </rule>
+
     <exclude-pattern>vendor/*</exclude-pattern>
 
     <!-- Progress, colours, and sniff codes in the report so a violation can be

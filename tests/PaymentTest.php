@@ -164,7 +164,7 @@ class PaymentTest extends PHPUnit_Framework_TestCase
      * Post a payment allocated to an invoice, then void it. The invoice's
      * allocated amount is what proves each step actually happened.
      */
-    public function testPaymentAllocateAndVoid_Ok()
+    public function testPaymentAllocateAndVoidOk()
     {
         $ref = $this->uniqueRef();
         $transNo = $this->createInvoice($ref);
@@ -217,7 +217,7 @@ class PaymentTest extends PHPUnit_Framework_TestCase
     /**
      * A payment with no allocation still posts, and still gets a reference.
      */
-    public function testPaymentWithoutAllocation_Ok()
+    public function testPaymentWithoutAllocationOk()
     {
         $this->createCustomer($this->uniqueRef());
 
@@ -248,7 +248,7 @@ class PaymentTest extends PHPUnit_Framework_TestCase
      * a 200 carrying a fragment of FrontAccounting page HTML, which is what the
      * review of the earlier payments pull request objected to.
      */
-    public function testPaymentValidation_Rejected()
+    public function testPaymentValidationRejected()
     {
         $this->createCustomer($this->uniqueRef());
         $customer = $this->customerId;
@@ -317,7 +317,7 @@ class PaymentTest extends PHPUnit_Framework_TestCase
      * Voiding something that was never there is a 404, not a 500 and not a
      * silent success.
      */
-    public function testVoidUnknownPayment_NotFound()
+    public function testVoidUnknownPaymentNotFound()
     {
         $response = $this->client->delete('/modules/api/payments/99999', array(
             'headers' => TestEnvironment::headers(),
