@@ -35,10 +35,17 @@ fi
 
 # One stack per checkout by default, keyed on the directory name, so a worktree
 # never collides with the main checkout's containers or database volume.
+#
+# Sanitised whether it was derived or passed in: compose rejects anything but
+# lowercase alphanumerics, hyphens and underscores, and the error names the
+# project rather than the setting that produced it. A PHP version makes an
+# obvious project name and an invalid one — "fa-api-ci-7.4" is how this was
+# found.
 if [ -z "${COMPOSE_PROJECT_NAME:-}" ]; then
-    slug="$(basename "$PROJECT_ROOT" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]/-/g')"
-    COMPOSE_PROJECT_NAME="fa-api-${slug}"
+    COMPOSE_PROJECT_NAME="fa-api-$(basename "$PROJECT_ROOT")"
 fi
+COMPOSE_PROJECT_NAME="$(printf '%s' "$COMPOSE_PROJECT_NAME" \
+    | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]/-/g')"
 export COMPOSE_PROJECT_NAME
 
 # Apache runs as www-data remapped to these, so what it and composer write into
