@@ -6,3 +6,4 @@ _frontaccounting
 *.zip
 *.tgz
 public/
+docker/.env
