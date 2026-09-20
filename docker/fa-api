@@ -35,10 +35,17 @@ fi
 
 # One stack per checkout by default, keyed on the directory name, so a worktree
 # never collides with the main checkout's containers or database volume.
+#
+# Sanitised whether it was derived or passed in: compose rejects anything but
+# lowercase alphanumerics, hyphens and underscores, and the error names the
+# project rather than the setting that produced it. A PHP version makes an
+# obvious project name and an invalid one — "fa-api-ci-7.4" is how this was
+# found.
 if [ -z "${COMPOSE_PROJECT_NAME:-}" ]; then
-    slug="$(basename "$PROJECT_ROOT" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]/-/g')"
-    COMPOSE_PROJECT_NAME="fa-api-${slug}"
+    COMPOSE_PROJECT_NAME="fa-api-$(basename "$PROJECT_ROOT")"
 fi
+COMPOSE_PROJECT_NAME="$(printf '%s' "$COMPOSE_PROJECT_NAME" \
+    | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]/-/g')"
 export COMPOSE_PROJECT_NAME
 
 # Apache runs as www-data remapped to these, so what it and composer write into
@@ -450,38 +457,25 @@ cmd_test() {
     # The suite drives Apache over HTTP rather than calling into the code, so
     # the application has to be answering before the first assertion.
     wait_for_http
-    c_exec_user php "$PHPUNIT" -c phpunit.xml "$@"
+    # Through the composer script, so `composer test` and `fa-api test` cannot
+    # drift apart. Arguments after -- reach phpunit: fa-api test --filter X.
+    c_exec_user composer run test -- "$@"
 }
 
-# php -l is the only static gate this project has; phpcs is advisory until the
-# PSR-2 debt in src/ and tests/ is paid off, which is why it does not fail the
-# command unless asked.
+# php -l gates; phpcs is advisory until the PSR-2 debt in src/ and tests/ is
+# paid off. Both are composer scripts (see composer.json and phpcs.xml) so they
+# run the same way here, on a laptop without docker, and in CI.
 cmd_lint() {
     local strict=0
     [ "${1:-}" = "--strict" ] && strict=1
 
     ensure_running
 
-    info "php -l (PHP $PHP_VERSION)"
-    c_exec_user sh -c '
-        status=0
-        for f in $(find . -path ./vendor -prune -o -path ./node_modules -prune \
-                        -o -path ./public -prune -o -path ./docker -prune \
-                        -o \( -name "*.php" -o -name "*.inc" \) -print | sort); do
-            if ! out=$(php -l "$f" 2>&1); then
-                printf "%s\n" "$out"
-                status=1
-            fi
-        done
-        [ "$status" = 0 ] && echo "no syntax errors"
-        exit $status
-    '
+    info "composer lint (php -l, PHP $PHP_VERSION)"
+    c_exec_user composer run lint
 
-    # tests/data holds FrontAccounting's own fixture config files, copied from
-    # FA and formatted like FA. Measuring them against PSR-2 says nothing about
-    # this module and buries the part that does under 200 violations.
-    info "phpcs --standard=PSR2 src tests"
-    if c_exec_user phpcs --standard=PSR2 --report=summary --ignore='*/tests/data/*' src tests; then
+    info "composer cs:check (PSR-2)"
+    if c_exec_user composer run cs:check -- --report=summary; then
         return 0
     fi
 
@@ -489,13 +483,29 @@ cmd_lint() {
         die "phpcs reported violations (--strict)"
     fi
     warn "phpcs reported violations — not failing the command.
-     Run 'docker/fa-api exec phpcs --standard=PSR2 src tests' for the detail,
-     or 'docker/fa-api lint --strict' to make them count."
+     Run 'docker/fa-api composer cs:check' for the detail, 'composer cs:fix' to
+     correct what phpcbf can, or 'docker/fa-api lint --strict' to make them count."
+}
+
+# PHPStan over src/ (phpstan.neon). It resolves FrontAccounting's symbols by
+# scanning ../.. — which is the FA tree here as much as in a normal checkout,
+# because the module is bind-mounted at /var/www/html/modules/api.
+cmd_analyze() {
+    ensure_running
+    c_exec_user composer run analyze
 }
 
 cmd_composer() {
     ensure_running
     c_exec_user composer "$@"
+}
+
+# make.phar is built into the image; `docs` additionally wants spectacle, which
+# is a node tool and is not (see docker/README.md).
+cmd_make() {
+    [ $# -gt 0 ] || die "usage: fa-api make <target>   (docs, package, clean)"
+    ensure_running
+    c_exec_user make.phar "$@"
 }
 
 cmd_shell() {
@@ -551,6 +561,7 @@ cmd_perms() {
 cmd_ci() {
     cmd_up --build
     cmd_lint
+    cmd_analyze
     cmd_test "$@"
 }
 
@@ -628,10 +639,12 @@ Database
   db shell           mysql client on the application database
 
 Testing and development
-  test [args]        Run the PHPUnit suite, installing composer deps on first use
-  lint [--strict]    php -l over the module, then phpcs PSR-2 on src/ and tests/.
+  test [args]        Run the PHPUnit suite (composer test)
+  lint [--strict]    composer lint (php -l), then composer cs:check (PSR-2).
                      phpcs is advisory unless --strict.
-  ci [args]          up --build, then lint, then test — what CI runs
+  make <target>      Run a phpmake target in the container: docs, package, clean
+  analyze            PHPStan over src/ (composer analyze)
+  ci [args]          up --build, then lint, analyze and test — what CI runs
   composer [args]    composer in the module directory, as you
   shell              bash there
   exec <cmd>         Run a command there
@@ -678,6 +691,8 @@ case "$cmd" in
     db) cmd_db "$@" ;;
     test) cmd_test "$@" ;;
     lint) cmd_lint "$@" ;;
+    analyze|analyse) cmd_analyze "$@" ;;
+    make) cmd_make "$@" ;;
     ci) cmd_ci "$@" ;;
     composer) cmd_composer "$@" ;;
     stop) compose stop "$@" ;;

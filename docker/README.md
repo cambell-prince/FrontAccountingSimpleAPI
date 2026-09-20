@@ -8,6 +8,7 @@ FrontAccounting checkout, a PHP, or a database on your own machine.
     docker/fa-api up        # build, boot, seed, install composer deps
     docker/fa-api test      # run the PHPUnit suite
     docker/fa-api lint      # php -l, then phpcs PSR-2
+    docker/fa-api analyze   # PHPStan
 
 `up` prints the URLs. `docker/fa-api help` lists every command.
 
@@ -17,9 +18,9 @@ locally is the build that will run on a push.
 ## How it fits together
 
 This module is not an application. It is an extension that only runs from
-`modules/api` inside a FrontAccounting tree, which is why `.travis.yml` had to
-clone FrontAccounting and rsync the module into it before it could test
-anything.
+`modules/api` inside a FrontAccounting tree, which is why the Travis build this
+replaced had to clone FrontAccounting and rsync the module into it before it
+could test anything.
 
 The stack does the same thing, pinned and repeatable:
 
@@ -32,8 +33,8 @@ The stack does the same thing, pinned and repeatable:
 
 Nothing is written into your checkout except `vendor/`. There is no
 FrontAccounting checkout to keep in step and no generated config of yours to
-overwrite — the contrast with `gulp env-files`, which copies fixture config
-files over whatever is in the working tree.
+overwrite — unlike the old `gulp env-files`, which copied fixture config files
+over whatever was in the working tree.
 
 To build against a different FrontAccounting, set both in `docker/.env` and
 rebuild — the clone is a build step:
@@ -63,57 +64,45 @@ by default, clear of the FrontAccounting stack's 8080.
 | `demo` | FrontAccounting's `sql/en_US-demo.sql`, from the image | admin / password |
 | a path | any `.sql` or `.sql.gz` on the host | — |
 
-`test` is the fixture the gulpfile's `env-db` task loads and the one the suite's
+`test` is the fixture the old `gulp env-db` task loaded, and the one the suite's
 `X-COMPANY: 0` / `X-USER: test` / `X-PASSWORD: test` credentials come from.
 `docker/fa-api db dump` writes a gzipped dump back out.
 
-## The suite does not currently pass
+## Tasks live in composer, not here
 
-`docker/fa-api test` on PHP 7.4 against FrontAccounting master reports **19
-tests, 164 assertions, 4 failures and 1 error**. All five predate this stack and
-none of them are caused by it. They are worth knowing before you read a red run
-as something you just broke.
+`fa-api test`, `lint` and `analyze` run `composer test`, `composer lint` +
+`composer cs:check`, and `composer analyze`. The CLI adds what a container needs
+around them — waiting for Apache, seeding the database, running as your uid —
+and nothing else, so there is one definition of each task rather than two that
+drift. They work on a host with its own FrontAccounting install too.
 
-**Four are the same thing:** FrontAccounting forces `SET sql_mode =
-'STRICT_ALL_TABLES'` on every connection (`SQL_MODE` in
-`includes/db/connect_db_mysqli.inc`, "prevents SQL injection with silent field
-content truncation"), and this module hands `''` to integer and date columns:
+`fa-api make <target>` runs a [phpmake](https://github.com/saygoweb/phpmake)
+target from `makefile.json` — `docs-json`, `docs`, `package`, `clean`.
+`make.phar` is built into the image. `docs` also needs `spectacle`, a node tool
+that is deliberately not installed here; `docs-json`, which regenerates
+`swagger.json` from the `@SWG` annotations, works on its own.
 
-| test | rejected INSERT |
-| --- | --- |
-| `CustomerTest` | `0_cust_branch.salesman` ← `''` — `Customers::post()` defaults `salesman` and `area` to `''` |
-| `DimensionTest` | `0_dimensions.type_` ← `''` |
-| `StockAdjustTest` | `0_journal.event_date` ← `''` |
-| `SalesTest` | fails in `createCustomer`, so the same one |
+## What the suite needs
 
-Setting the server's `--sql-mode` does not help: FA overrides it per connection.
-The fix belongs in the module — pass `0` and a real date — not here.
+19 tests, 216 assertions, green on PHP 7.4 against FrontAccounting master. They
+are HTTP integration tests: they drive Apache in this container, so `up` has to
+have seeded the database first. `fa-api test` waits for the application before
+the first assertion rather than letting seven Guzzle connection errors stand in
+for "the stack is not up yet".
 
-What you see when it happens is an endpoint answering **200 with a fragment of
-FrontAccounting page HTML** instead of 201 with JSON, because FA turns a
-database error into `E_USER_ERROR`, and `output_html()` swallows the rest.
-`docker/fa-api logs errors` shows the actual `DATABASE ERROR` line. That is the
-first place to look whenever a response is HTML or empty.
+Two of them depend on what ran before — `SalesTest` posts a hard-coded
+`customer_id=2`, so it fails on its own against a freshly seeded database and
+passes in a full run. Use `fa-api test` without `--filter` to reproduce CI.
 
-**The fifth**, `JournalTest`, expects reference `1` and gets `2` — a test that
-assumes a reference counter starting where a clean fixture leaves it.
-
-### PHP 7.4 and POST
-
-Separately: Slim 2.6.3 calls `get_magic_quotes_gpc()` in
-`Slim\Http\Util::stripSlashesIfMagicQuotes()`, which PHP 7.4 deprecates. Slim
-installs an error handler that turns anything in `error_reporting()` into an
-`ErrorException`, so with FrontAccounting's debug mode on (`$go_debug` in
-`config.php`) **every POST and PUT dies before reaching its route** with "Slim
-Application Error". With debug off the deprecation is below the reporting level
-and requests work. `.travis.yml` tested 5.6 and 7.0, where the function is not
-deprecated, so this is new ground. It is one more thing the Slim 4 port on
-`feature/php8` removes.
+When a response comes back as HTML or an empty body, FrontAccounting has turned
+a database error into `E_USER_ERROR` and `output_html()` has swallowed it.
+`docker/fa-api logs errors` shows the `DATABASE ERROR` line. That is the first
+place to look; the endpoint will have answered 200, never a 500.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs `up --build`, `lint` and `test` through this
-same CLI, on two PHP versions:
+`.github/workflows/ci.yml` runs `up --build`, `lint`, `analyze` and `test`
+through this same CLI, on two PHP versions:
 
 - **7.4** — the gate. The newest either this module or FrontAccounting 2.4.x is
   written for.
@@ -122,9 +111,10 @@ same CLI, on two PHP versions:
   every unrelated pull request would only teach people to ignore it.
 
 `lint` gates on `php -l` and reports phpcs without failing — there are 125 PSR-2
-errors in `src/` and `tests/` today, 304 of which `phpcbf` can fix
+errors in `src/` and `tests/` today, 77 of which `composer cs:fix` can correct
 automatically. `docker/fa-api lint --strict` makes them count, once someone has
-done that.
+done that. `analyze` gates on PHPStan level 0, which is clean; `phpstan.neon`
+records what raising the level would cost.
 
 `docker/fa-api` has to be executable in git for the workflow to run it. This
 repo has `core.fileMode=false`, so `chmod +x` alone does not record it:
@@ -178,10 +168,11 @@ for the reason above.
 
 ## Not included
 
-The gulp tasks. `gulp test` and `gulp env-db` assume the `_frontaccounting/`
-layout `.travis.yml` built and need node 10 for gulp 3; the documentation build
-(`gulp doc`) additionally wants a global `spectacle`. Swagger generation and
-packaging still run on the host.
+`spectacle`, the node tool that renders `swagger.json` into the static HTML
+published on `gh-pages`. It is the last thing in this project that wanted node,
+and installing a node toolchain into the image to run one command at release
+time is not worth it — `npm i -g spectacle-docs` on the host, then
+`make.phar docs`.
 
 ## Relationship to the FrontAccounting stack
 

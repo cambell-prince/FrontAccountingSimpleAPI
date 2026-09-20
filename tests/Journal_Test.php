@@ -13,7 +13,7 @@ const JOURNAL_POST_DATA = array(
     'event_date' => '2013-01-12',
     'currency' => 'USD',
     'document_ref' => 'INV_123456',
-    'reference' => '',
+    'reference' => '',  // replaced per-run in the constructor
     'memo' => 'Test memo',
     'items' => array(
         array(
@@ -53,6 +53,12 @@ class JournalTest extends Crud_Base
      */
     public function __construct()
     {
+        // A journal reference has to be unique and is assigned by
+        // $Refs->get_next() when none is posted. GLQueries_Test runs before this
+        // one and takes the first, so an expectation of '1' held only in
+        // isolation. Post a reference of our own and the test stops caring what
+        // ran before it.
+        $this->postData['reference'] = 'J' . TestEnvironment::createId();
         $this->putData = $this->postData;
         $this->putData['document_ref'] = 'INV_NEW_123456';
         $this->putData['document_date'] = '2013-02-13';
@@ -99,7 +105,6 @@ class JournalTest extends Crud_Base
     protected function checkGetAfterPost($result)
     {
         $expected = $this->fixExpectedType($this->postData, $result);
-        $expected->reference = '1';
         foreach ($expected->items as $key => $value) {
             $expected->items[$key] = $this->fixExpectedType($value, $result->items[$key]);
         }
@@ -112,7 +117,7 @@ class JournalTest extends Crud_Base
     {
         $expected = $this->fixExpectedType($this->putData, $result);
         $expected->currency = 'USD';
-        $expected->reference = '1';
+        $expected->reference = $this->postData['reference'];
         $expected->items = $this->postData['items'];
         foreach ($expected->items as $key => $value) {
             $expected->items[$key] = $this->fixExpectedType($value, $result->items[$key]);

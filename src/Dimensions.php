@@ -39,6 +39,9 @@ include_once($path_to_root . "/dimensions/includes/dimensions_db.inc");
  */
 class Dimensions
 {
+    /** FrontAccounting's "no date"; date2sql() passes it through unchanged. */
+    const NO_DATE = '0000-00-00';
+
     /**
      * @SWG\Get(
      *   path="/dimensions",
@@ -136,8 +139,22 @@ class Dimensions
         \api_validate('reference', $model);
         \api_validate('name', $model);
         \api_check('memo', $model);
+        // type_ is an integer column and date_/due_date are dates, so '' is not a
+        // storable default under FrontAccounting's sql_mode=STRICT_ALL_TABLES.
+        // date2sql() passes '0000-00-00' through unchanged, which is how FA spells
+        // "no date".
+        \api_check('type_', $model, 0);
+        \api_check('date_', $model, self::NO_DATE);
+        \api_check('due_date', $model, self::NO_DATE);
         // add_dimension($reference, $name, $type_, $date_, $due_date, $memo_)
-        $id = add_dimension($model['reference'], $model['name'], '', '', '', $model['memo']);
+        $id = add_dimension(
+            $model['reference'],
+            $model['name'],
+            $model['type_'],
+            $model['date_'],
+            $model['due_date'],
+            $model['memo']
+        );
         \api_create_response(array('id' => $id));
     }
 
@@ -181,8 +198,18 @@ class Dimensions
         \api_validate('reference', $model);
         \api_validate('name', $model);
         \api_check('memo', $model);
+        \api_check('type_', $model, 0);
+        \api_check('date_', $model, self::NO_DATE);
+        \api_check('due_date', $model, self::NO_DATE);
         // update_dimension($id, $name, $type_, $date_, $due_date, $memo_)
-        $id = update_dimension($id, $model['name'], '', '', '', $model['memo']);
+        $id = update_dimension(
+            $id,
+            $model['name'],
+            $model['type_'],
+            $model['date_'],
+            $model['due_date'],
+            $model['memo']
+        );
         \api_success_response(array('id' => $id));
     }
 

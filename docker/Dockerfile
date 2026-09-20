@@ -47,6 +47,7 @@ RUN set -eux; \
         apache2 \
         mariadb-client \
         unzip \
+        zip \
         libapache2-mod-php${PHP_VERSION} \
         php${PHP_VERSION}-cli \
         php${PHP_VERSION}-common \
@@ -65,15 +66,18 @@ RUN set -eux; \
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# PHP_CodeSniffer as a standalone phar rather than a dev dependency: this
-# module's composer.json is pinned to a PHP 5.6-era dependency set (phpunit
-# ~4.2.6), and adding a modern tool to it would drag that whole resolution
-# sideways. Override PHPCS_URL with a versioned release URL to pin it.
-ARG PHPCS_URL=https://github.com/PHPCSStandards/PHP_CodeSniffer/releases/latest/download/phpcs.phar
+# phpmake — the build runner the module's `composer docs` and `composer package`
+# scripts delegate to. It is not a composer package: it is built from source
+# into a phar and put on PATH, which is what its own install.php does.
+ARG PHPMAKE_REPO=https://github.com/saygoweb/phpmake.git
+ARG PHPMAKE_REF=master
 RUN set -eux; \
-    curl -fsSL "${PHPCS_URL}" -o /usr/local/bin/phpcs; \
-    chmod +x /usr/local/bin/phpcs; \
-    phpcs --version
+    git clone --depth 1 --branch "${PHPMAKE_REF}" "${PHPMAKE_REPO}" /tmp/phpmake; \
+    cd /tmp/phpmake; \
+    php -d phar.readonly=0 build-phar.php; \
+    install -m 0755 make.phar /usr/local/bin/make.phar; \
+    rm -rf /tmp/phpmake; \
+    test -s /usr/local/bin/make.phar
 
 # ---------------------------------------------------------------------------
 # FrontAccounting itself

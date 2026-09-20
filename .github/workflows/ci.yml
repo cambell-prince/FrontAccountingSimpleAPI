@@ -32,9 +32,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # slug because a compose project name cannot contain a dot.
           - php: '7.4'
+            slug: '74'
             experimental: false
           - php: '8.3'
+            slug: '83'
             experimental: true
 
     env:
@@ -42,7 +45,7 @@ jobs:
       # The workflow runs one stack per job; fixed ports are free on a runner.
       HTTP_PORT: '8090'
       DB_PORT: '3309'
-      COMPOSE_PROJECT_NAME: fa-api-ci-${{ matrix.php }}
+      COMPOSE_PROJECT_NAME: fa-api-ci-${{ matrix.slug }}
 
     steps:
       - uses: actions/checkout@v4
@@ -54,6 +57,9 @@ jobs:
 
       - name: Lint
         run: docker/fa-api lint
+
+      - name: Analyze
+        run: docker/fa-api analyze
 
       - name: Test
         run: docker/fa-api test
