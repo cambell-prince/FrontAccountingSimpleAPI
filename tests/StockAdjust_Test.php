@@ -1,6 +1,7 @@
 <?php
 
 use GuzzleHttp\Client;
+use PHPUnit\Framework\TestCase;
 
 require_once(__DIR__ . '/TestConfig.php');
 
@@ -17,7 +18,7 @@ const STOCK_POST_DATA = array(
     'memo' => 'Some Memo'
 );
 
-class StockAdjustTest extends PHPUnit_Framework_TestCase
+class StockAdjustTest extends TestCase
 {
     public function testStockAdjust_Ok()
     {

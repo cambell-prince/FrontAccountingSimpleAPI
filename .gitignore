@@ -10,3 +10,9 @@ docker/.env
 
 # phpmake run logs
 log/
+
+# phpunit's test-order cache
+.phpunit.result.cache
+
+# swagger-php, installed on demand by make.phar docs-json
+build/swagger/vendor/

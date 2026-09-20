@@ -1,6 +1,7 @@
 <?php
 
 use GuzzleHttp\Client;
+use PHPUnit\Framework\TestCase;
 
 require_once(__DIR__ . '/TestConfig.php');
 
@@ -104,7 +105,7 @@ class InventoryTest extends Crud_Base
     // 	public function testCRUD_Ok();
 }
 
-class InventoryOtherTest extends PHPUnit_Framework_TestCase
+class InventoryOtherTest extends TestCase
 {
     public function testLocations_Ok()
     {

@@ -1,6 +1,7 @@
 <?php
 
 use GuzzleHttp\Client;
+use PHPUnit\Framework\TestCase;
 
 require_once(__DIR__ . '/TestConfig.php');
 
@@ -9,7 +10,7 @@ require_once(TEST_PATH . '/TestEnvironment.php');
 /**
  * @group wip
  */
-class GLTrialBalanceTest extends PHPUnit_Framework_TestCase
+class GLTrialBalanceTest extends TestCase
 {
     public function testAccountTypes_Ok()
     {

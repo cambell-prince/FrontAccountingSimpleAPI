@@ -1,6 +1,7 @@
 <?php
 
 use GuzzleHttp\Client;
+use PHPUnit\Framework\TestCase;
 
 require_once(__DIR__ . '/TestConfig.php');
 
@@ -19,7 +20,7 @@ require_once(SRC_PATH . '/includes/types.inc');
  *
  * Dates are inside 2013 because the fixture's fiscal years are 2010-2013.
  */
-class PaymentTest extends PHPUnit_Framework_TestCase
+class PaymentTest extends TestCase
 {
     /*
      * The requests that expect a rejection pass 'http_errors' => false.
@@ -37,7 +38,7 @@ class PaymentTest extends PHPUnit_Framework_TestCase
 
     private $branchId;
 
-    public function setUp()
+    public function setUp(): void
     {
         $this->client = TestEnvironment::client();
     }

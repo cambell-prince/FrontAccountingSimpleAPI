@@ -1,12 +1,13 @@
 <?php
 
 use GuzzleHttp\Client;
+use PHPUnit\Framework\TestCase;
 
 require_once(__DIR__ . '/TestConfig.php');
 
 require_once(TEST_PATH . '/TestEnvironment.php');
 
-abstract class Crud_Base extends PHPUnit_Framework_TestCase
+abstract class Crud_Base extends TestCase
 {
     private $postData;
 
@@ -30,6 +31,13 @@ abstract class Crud_Base extends PHPUnit_Framework_TestCase
      */
     public function __construct($url, $keyProperty, $postData, $putData = null)
     {
+        // PHPUnit 9 keeps state of its own in TestCase (the data set, among
+        // other things) and leaves it null if its constructor never runs -
+        // which surfaces later as "array_merge(): Expected parameter 1 to be an
+        // array, null given" from inside PHPUnit. PHPUnit 4 tolerated the
+        // omission.
+        parent::__construct();
+
         $this->url = $url;
         $this->keyProperty = $keyProperty;
 

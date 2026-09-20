@@ -1,12 +1,13 @@
 <?php
 
 use GuzzleHttp\Client;
+use PHPUnit\Framework\TestCase;
 
 require_once(__DIR__ . '/TestConfig.php');
 
 require_once(TEST_PATH . '/TestEnvironment.php');
 
-class TaxTest extends PHPUnit_Framework_TestCase
+class TaxTest extends TestCase
 {
     public function testTaxTypes_Ok()
     {

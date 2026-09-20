@@ -1,5 +1,6 @@
 <?php
 use GuzzleHttp\Client;
+use PHPUnit\Framework\TestCase;
 
 require_once(__DIR__ . '/TestConfig.php');
 
@@ -59,7 +60,7 @@ class BankAccountsTest extends Crud_Base
     // 	public function testCRUD_Ok();
 }
 
-class BankAccountsOtherTest extends PHPUnit_Framework_TestCase
+class BankAccountsOtherTest extends TestCase
 {
     public function testBankAccount_ReadAll_Ok()
     {

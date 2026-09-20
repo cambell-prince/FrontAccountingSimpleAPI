@@ -104,11 +104,16 @@ place to look; the endpoint will have answered 200, never a 500.
 `.github/workflows/ci.yml` runs `up --build`, `lint`, `analyze` and `test`
 through this same CLI, on two PHP versions:
 
-- **7.4** — the gate. The newest either this module or FrontAccounting 2.4.x is
-  written for.
-- **8.3** — `continue-on-error`, a scoreboard for the Slim 4 / PHP 8 port on
-  `feature/php8`. Slim 2 and phpunit 4.2 cannot run there; saying so in red on
-  every unrelated pull request would only teach people to ignore it.
+- **7.4** — the oldest the module supports, and the platform `composer.json`
+  resolves the lock against, so one lock file serves both jobs.
+- **8.3** — current. Both gate; the suite is green on each.
+
+Run the stack on either. The environment wins over `docker/.env`, so:
+
+    PHP_VERSION=8.3 COMPOSE_PROJECT_NAME=fa-api-83 HTTP_PORT=8095 DB_PORT=3311 \
+        docker/fa-api up --build
+
+gives a second stack beside the 7.4 one rather than replacing it.
 
 `lint` gates on `php -l` and reports phpcs without failing — there are 125 PSR-2
 errors in `src/` and `tests/` today, 77 of which `composer cs:fix` can correct

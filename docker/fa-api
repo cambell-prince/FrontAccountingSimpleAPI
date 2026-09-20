@@ -26,11 +26,28 @@ export PROJECT_ROOT
 
 # Per-checkout overrides (ports, PHP version, which FA to build against).
 # Optional; `fa-api init` writes one.
+#
+# Anything already in the environment wins, the way it does for docker compose
+# itself: `PHP_VERSION=8.3 docker/fa-api up --build` has to mean 8.3 even though
+# docker/.env exists. Sourcing the file would silently do the opposite.
 if [ -f "$ENV_FILE" ]; then
-    set -a
-    # shellcheck disable=SC1090
-    . "$ENV_FILE"
-    set +a
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            ''|'#'*) continue ;;
+            *=*) ;;
+            *) continue ;;
+        esac
+        key="${line%%=*}"
+        value="${line#*=}"
+        # Trim one layer of surrounding quotes, as a shell would have.
+        case "$value" in
+            \"*\") value="${value#\"}"; value="${value%\"}" ;;
+            \'*\') value="${value#\'}"; value="${value%\'}" ;;
+        esac
+        if [ -z "$(eval "printf '%s' \"\${$key:-}\"")" ]; then
+            export "$key=$value"
+        fi
+    done < "$ENV_FILE"
 fi
 
 # One stack per checkout by default, keyed on the directory name, so a worktree

@@ -1,33 +1,27 @@
-# PHP 8 / Slim 4 migration (branch `feature/php8`)
+# PHP 8 support
 
-Active, **unfinished** line of work; as of 2026-09-20 a single `wip` commit (42cb793) ahead of
-`master`, and the working tree is usually checked out on `master`. The local PHP CLI is 8.3, so
-`master` cannot actually be run here — this branch is the path to a runnable module.
+Done as of 2026-09-21: the module runs on PHP 8.3 and CI gates on 7.4 and 8.3
+alike. Slim 2.6.3 was kept; the Slim 4 port on `feature/php8` was not needed and
+that branch is stale — it predates the docker stack, the composer tooling and
+everything in [[docker]].
 
-What the wip commit changes:
-- `composer.json`: `slim/slim ~2.6.3` → `~4.0.0` plus `slim/psr7 ^1.5` (lock + a
-  `package-lock.json` regenerated). The installed `vendor/` on disk matches **this** lock
-  (guzzle 6.5.8, doctrine/annotations 1.14), not `master`'s.
-- `index.php`: `new \Slim\Slim(...)` / `setName('SASYS')` commented out, replaced by
-  `AppFactory::create()`; PSR-7 `Request`/`Response` imports added.
-- `util.php`: `api_login()` now takes the `Slim\App` instead of `\Slim\Slim::getInstance('SASYS')`.
-- Removed PHP-8-incompatible leftovers from the forked FA session files: `strip_quotes()`
-  (used `get_magic_quotes_gpc()`) in `session_utils.inc` and its call on `$_POST` in
-  `session-custom.inc`.
+What it took, all small:
 
-Known remaining work — Slim 4 has no equivalent of the Slim 2 idioms this codebase is built on:
-- `$app->hook('slim.before', ...)` → PSR-15 middleware (the auth hook in `api_login`).
-- `$rest->container->singleton(...)` → a PSR-11 container (`AppFactory::setContainer`), and every
-  route closure's `$rest-><name>-><method>()` call goes with it.
-- `$rest->request()` / `$req->get()` / `$req->post()` inside all 16 `src/` controllers →
-  `$request->getQueryParams()` / `getParsedBody()`; handlers must **return** a `Response` instead
-  of writing through `api_response()`'s `$app->response()->body()`.
-- `$app->halt()` (used by `api_error`) has no Slim 4 counterpart.
-- The `JsonToFormData` middleware extends `\Slim\Middleware`; Slim 4 parses JSON bodies itself.
-- Route placeholders change from `:id` to `{id}`, and `$rest->run()` → `$rest->run()` still, but
-  after `addRoutingMiddleware()` / `addErrorMiddleware()`.
-- PHPUnit is still pinned `~4.2.6`, which does not run on PHP 8 — the test suite needs a bump
-  (and `PHPUnit_Framework_TestCase` → `PHPUnit\Framework\TestCase`) before it can verify any of this.
+- A `get_magic_quotes_gpc()` shim in `index.php`. Slim 2 calls it from
+  `Slim\Http\Util::stripSlashesIfMagicQuotes()` on every form POST, and PHP 8.0
+  removed it. Returning false is what PHP 8 guarantees anyway.
+- Opening the database connection in `session-custom.inc` before
+  `front_accounting->init()`, which on current FA queries company prefs and so
+  reached `mysqli_query()` with a null connection.
+- Dependency bumps; see [[tech_stack]].
 
-Rewriting the controllers against a Slim-version-agnostic wrapper is the obvious way to avoid
-touching all 16 classes twice, but no such decision is recorded — confirm with the user.
+## The trap worth remembering
+
+**PHP 8.1 made mysqli throw by default.** FrontAccounting 2.4 is written for
+mysqli returning false and handles errors itself, so a failing query that 7.4
+swallowed — FA raising `E_USER_ERROR`, `output_html()` stripping it out, the
+endpoint answering 200 — becomes an uncaught `mysqli_sql_exception` and a 500 on
+8.1+. That is how the journal void bug was found: it voided on today's date, and
+`add_audit_trail()` cannot store a null `fiscal_year` for a date outside any
+fiscal year. The same class of bug is likely to be hiding elsewhere; running the
+suite on 8.3 is what surfaces it.

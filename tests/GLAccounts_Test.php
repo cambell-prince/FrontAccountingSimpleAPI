@@ -1,6 +1,7 @@
 <?php
 
 use GuzzleHttp\Client;
+use PHPUnit\Framework\TestCase;
 
 require_once(__DIR__ . '/TestConfig.php');
 
@@ -49,7 +50,7 @@ class GLAccountsTest extends Crud_Base
     // 	public function testCRUD_Ok();
 }
 
-class GLOtherTest extends PHPUnit_Framework_TestCase
+class GLOtherTest extends TestCase
 {
     public function testAccountTypes_Ok()
     {
