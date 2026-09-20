@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - master-cp
+      - 'feature/**'
+      - 'fix/**'
+      - 'bug/**'
+      - 'issue/**'
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same branch makes the first run's answer irrelevant, and
+# each run builds an image and a database.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+
+    # 8.3 is the scoreboard for the Slim 4 / PHP 8 port on feature/php8, not a
+    # gate: master's Slim 2 and phpunit 4.2 cannot run there, and saying so in
+    # red on every unrelated pull request would only teach people to ignore it.
+    continue-on-error: ${{ matrix.experimental }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: '7.4'
+            experimental: false
+          - php: '8.3'
+            experimental: true
+
+    env:
+      PHP_VERSION: ${{ matrix.php }}
+      # The workflow runs one stack per job; fixed ports are free on a runner.
+      HTTP_PORT: '8090'
+      DB_PORT: '3309'
+      COMPOSE_PROJECT_NAME: fa-api-ci-${{ matrix.php }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Everything below goes through the same CLI a developer uses, so a green
+      # run here means `docker/fa-api ci` is green on a laptop too.
+      - name: Build and boot the stack
+        run: docker/fa-api up --build
+
+      - name: Lint
+        run: docker/fa-api lint
+
+      - name: Test
+        run: docker/fa-api test
+
+      - name: Container logs
+        if: failure()
+        run: |
+          docker/fa-api logs app --tail 300
+          docker/fa-api logs errors || true
+
+      - name: Tear down
+        if: always()
+        run: docker/fa-api destroy --yes

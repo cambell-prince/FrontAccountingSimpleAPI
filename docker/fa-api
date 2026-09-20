@@ -1,0 +1,698 @@
+#!/usr/bin/env bash
+#
+# fa-api — drive the API module's test stack from the host.
+#
+# The module only runs inside a FrontAccounting checkout, so the stack supplies
+# one: FrontAccounting is cloned into the image at build time and this
+# repository is bind-mounted over /var/www/html/modules/api. Apache serves the
+# result on port 8000 inside the container, which is the address the committed
+# test suite asks for.
+#
+#   docker/fa-api init      # pick host ports that are free here
+#   docker/fa-api up        # build, boot, seed the database
+#   docker/fa-api test      # run the PHPUnit suite against it
+#   docker/fa-api lint      # php -l over the module, then phpcs
+#
+# Run `docker/fa-api help` for the full list.
+
+set -euo pipefail
+
+DOCKER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$DOCKER_DIR/.." && pwd)"
+COMPOSE_FILE="$DOCKER_DIR/docker-compose.yml"
+ENV_FILE="$DOCKER_DIR/.env"
+
+export PROJECT_ROOT
+
+# Per-checkout overrides (ports, PHP version, which FA to build against).
+# Optional; `fa-api init` writes one.
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$ENV_FILE"
+    set +a
+fi
+
+# One stack per checkout by default, keyed on the directory name, so a worktree
+# never collides with the main checkout's containers or database volume.
+if [ -z "${COMPOSE_PROJECT_NAME:-}" ]; then
+    slug="$(basename "$PROJECT_ROOT" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]/-/g')"
+    COMPOSE_PROJECT_NAME="fa-api-${slug}"
+fi
+export COMPOSE_PROJECT_NAME
+
+# Apache runs as www-data remapped to these, so what it and composer write into
+# the bind-mounted checkout stays owned by you on the host.
+export USER_UID="${USER_UID:-$(id -u)}"
+export USER_GID="${USER_GID:-$(id -g)}"
+
+export PHP_VERSION="${PHP_VERSION:-7.4}"
+export MARIADB_VERSION="${MARIADB_VERSION:-10.11}"
+export INSTALL_XDEBUG="${INSTALL_XDEBUG:-true}"
+export XDEBUG_MODE="${XDEBUG_MODE:-off}"
+
+export FA_REPO="${FA_REPO:-https://github.com/FrontAccountingERP/FA.git}"
+export FA_REF="${FA_REF:-master}"
+
+# FA calls xdebug_call_file() on every query when $go_debug is on, and xdebug 3
+# only provides that function in "develop" mode — see docker-entrypoint.sh. So
+# enabling xdebug for step debugging or coverage without develop just trades one
+# breakage for another. Fold it in rather than leaving the trap in docker/.env.
+#
+# Done here and not in the entrypoint because `docker compose exec` gives a new
+# process the container's recorded environment, not whatever the entrypoint
+# edited — so a fix applied there would reach Apache but not `fa-api test`.
+case "$XDEBUG_MODE" in
+    off|'' | *develop*) ;;
+    *) XDEBUG_MODE="develop,$XDEBUG_MODE"; export XDEBUG_MODE ;;
+esac
+export FA_TIMEZONE="${FA_TIMEZONE:-UTC}"
+
+# Deliberately clear of the FrontAccounting stack's 8080/3307/8081 defaults, so
+# both can run at once.
+export HTTP_PORT="${HTTP_PORT:-8090}"
+export DB_PORT="${DB_PORT:-3309}"
+export PMA_PORT="${PMA_PORT:-8091}"
+
+export DB_NAME="${DB_NAME:-fa_test}"
+export DB_USER="${DB_USER:-fa}"
+export DB_PASSWORD="${DB_PASSWORD:-fa}"
+export DB_ROOT_PASSWORD="${DB_ROOT_PASSWORD:-fa}"
+export DB_PREFIX="${DB_PREFIX:-0_}"
+
+SERVICE=app
+DB_SERVICE=db
+FA_DIR=/var/www/html
+APP_DIR=/var/www/html/modules/api
+
+# The package's own entry point rather than vendor/bin/phpunit. The bin/ entry
+# is a proxy composer regenerates only when it installs a package, so an
+# interrupted install can leave it an empty file — which then runs, prints
+# nothing and exits 0, reporting a green suite that never executed.
+PHPUNIT=vendor/phpunit/phpunit/phpunit
+
+# Dataset loaded by `fa-api up` when the database is empty, and the default for
+# `fa-api db reset`.
+SEED="${SEED:-test}"
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+die() {
+    printf 'fa-api: %s\n' "$*" >&2
+    exit 1
+}
+
+info() {
+    printf '\033[36m==>\033[0m %s\n' "$*"
+}
+
+warn() {
+    printf '\033[33m==>\033[0m %s\n' "$*" >&2
+}
+
+compose() {
+    docker compose -f "$COMPOSE_FILE" --project-directory "$DOCKER_DIR" "$@"
+}
+
+# -T because agents, scripts and CI pipe this; there is no TTY to allocate.
+c_exec() {
+    compose exec -T "$SERVICE" "$@"
+}
+
+# As the host user, for anything that writes into the bind-mounted checkout.
+#
+# `docker compose exec` runs as the image's user, which is root here — Apache
+# only drops to www-data for its workers. A plain exec would leave the whole of
+# vendor/ owned by root:root on the host, where it cannot be edited or even
+# deleted without sudo. HOME goes to /tmp because the host uid has no home
+# directory in this image and composer needs somewhere for its cache.
+c_exec_user() {
+    local tty_args=()
+    [ -t 0 ] && [ -t 1 ] || tty_args=(-T)
+    compose exec "${tty_args[@]}" \
+        --user "$USER_UID:$USER_GID" \
+        -e HOME=/tmp \
+        -e COMPOSER_HOME=/tmp/composer \
+        -w "$APP_DIR" \
+        "$SERVICE" "$@"
+}
+
+running() {
+    local id
+    id="$(compose ps -q "$SERVICE" 2>/dev/null)" || return 1
+    [ -n "$id" ] || return 1
+    [ "$(docker inspect -f '{{.State.Running}}' "$id" 2>/dev/null)" = "true" ]
+}
+
+ensure_running() {
+    running || die "the stack is not running — run 'docker/fa-api up' first"
+}
+
+db_mysql() {
+    compose exec -T "$DB_SERVICE" mysql -u root -p"$DB_ROOT_PASSWORD" "$@"
+}
+
+db_ready() {
+    db_mysql -e 'SELECT 1' >/dev/null 2>&1
+}
+
+wait_for_db() {
+    local waited=0
+    until db_ready; do
+        waited=$((waited + 2))
+        [ "$waited" -ge 120 ] && die "the database did not come up within 120s — check 'docker/fa-api logs db'"
+        sleep 2
+    done
+}
+
+# Whether FrontAccounting's schema is there, rather than whether the database
+# exists: MYSQL_DATABASE creates an empty one on first boot.
+db_seeded() {
+    local count
+    count="$(db_mysql -N -B -e "SELECT COUNT(*) FROM information_schema.tables
+            WHERE table_schema='$DB_NAME' AND table_name='${DB_PREFIX}users'" 2>/dev/null)" || return 1
+    [ "${count:-0}" -gt 0 ]
+}
+
+# Apache is up and FrontAccounting is answering. The suite's first request is a
+# real one, so a failure here is much easier to read than seven Guzzle
+# connection errors.
+wait_for_http() {
+    local waited=0
+    until c_exec php -r '
+        $c = curl_init("http://localhost:8000/modules/api/category/");
+        curl_setopt($c, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($c, CURLOPT_TIMEOUT, 5);
+        curl_exec($c);
+        $code = curl_getinfo($c, CURLINFO_HTTP_CODE);
+        exit($code > 0 ? 0 : 1);
+    ' >/dev/null 2>&1; do
+        waited=$((waited + 2))
+        [ "$waited" -ge 60 ] && die "Apache did not answer within 60s — check 'docker/fa-api logs app'"
+        sleep 2
+    done
+}
+
+listening_ports() {
+    command -v ss >/dev/null 2>&1 || return 0
+    ss -lntH 2>/dev/null | awk '{ n = split($4, a, ":"); print a[n] }' | sort -u
+}
+
+port_in_use() {
+    if command -v ss >/dev/null 2>&1; then
+        listening_ports | grep -qx "$1" && return 0
+    fi
+    (exec 3<>"/dev/tcp/127.0.0.1/$1") >/dev/null 2>&1 || return 1
+    exec 3<&- 3>&-
+    return 0
+}
+
+# Ports handed out earlier in the same init run are not listening yet, so
+# port_in_use cannot see them. The answer comes back in REPLY because $(...)
+# would run this in a subshell, where the claim would be thrown away with it.
+_claimed_ports=''
+
+find_free_port() {
+    local port="$1"
+    while port_in_use "$port" || [[ " $_claimed_ports " == *" $port "* ]]; do
+        port=$((port + 1))
+    done
+    _claimed_ports="$_claimed_ports $port"
+    REPLY="$port"
+}
+
+# config_api.php resolves FA's root as ./_frontaccounting when that path exists
+# and ../.. otherwise. .travis.yml cloned FA there, so the check earns its keep
+# in CI — but an *empty file* of that name, which is what a local checkout tends
+# to end up with, also satisfies file_exists(). FA_ROOT then points at a
+# non-directory and every FA include fails, with an error that blames the
+# include rather than the file that caused it.
+check_stray_fa_marker() {
+    local marker="$PROJECT_ROOT/_frontaccounting"
+    [ -e "$marker" ] || return 0
+    [ -d "$marker" ] && return 0
+    die "$marker exists and is not a directory.
+
+config_api.php takes it as FrontAccounting's root, so every request in the
+container would fail on a bad include. It is gitignored scratch — remove it:
+
+    rm -f '$marker'"
+}
+
+# ---------------------------------------------------------------------------
+# commands
+# ---------------------------------------------------------------------------
+
+cmd_init() {
+    if [ -f "$ENV_FILE" ] && [ "${1:-}" != "--force" ]; then
+        die ".env already exists at $ENV_FILE (pass --force to overwrite)"
+    fi
+
+    info "probing for free ports"
+    local http db pma
+    find_free_port "$HTTP_PORT"; http="$REPLY"
+    find_free_port "$DB_PORT";   db="$REPLY"
+    find_free_port "$PMA_PORT";  pma="$REPLY"
+
+    # Re-running with --force must not discard anything added by hand. Keep
+    # every KEY=value line this command does not itself generate.
+    local generated='^(COMPOSE_PROJECT_NAME|HTTP_PORT|DB_PORT|PMA_PORT)='
+    local preserved=""
+    if [ -f "$ENV_FILE" ]; then
+        preserved="$(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$ENV_FILE" | grep -vE "$generated" || true)"
+    fi
+
+    cat > "$ENV_FILE" <<EOF
+# Generated by \`docker/fa-api init\` on $(date -u +%Y-%m-%dT%H:%M:%SZ).
+# Local overrides for this checkout — not tracked by git.
+# See .env.example for everything else that can go in here.
+
+COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME
+
+HTTP_PORT=$http
+DB_PORT=$db
+PMA_PORT=$pma
+EOF
+
+    if [ -n "$preserved" ]; then
+        {
+            printf '\n# Preserved from the previous %s (not written by init):\n' "$(basename "$ENV_FILE")"
+            printf '%s\n' "$preserved"
+        } >> "$ENV_FILE"
+    fi
+
+    info "wrote $ENV_FILE (http=$http db=$db)"
+}
+
+cmd_up() {
+    local build_args=() up_args=() skip_seed=0 with_tools=0
+    for arg in "$@"; do
+        case "$arg" in
+            --build) build_args+=(--build) ;;
+            --recreate) up_args+=(--force-recreate) ;;
+            --no-seed) skip_seed=1 ;;
+            --with-tools) with_tools=1 ;;
+            *) die "unknown option for up: $arg" ;;
+        esac
+    done
+
+    check_stray_fa_marker
+
+    if ! running && port_in_use "$HTTP_PORT"; then
+        die "port HTTP_PORT=$HTTP_PORT is already in use.
+Run 'docker/fa-api init' to write docker/.env with free ports, or set it yourself."
+    fi
+
+    local profile_args=()
+    [ "$with_tools" = 1 ] && profile_args=(--profile tools)
+
+    info "starting '$COMPOSE_PROJECT_NAME' (php $PHP_VERSION, mariadb $MARIADB_VERSION, FA $FA_REF)"
+    compose "${profile_args[@]}" up -d "${up_args[@]}" "${build_args[@]}"
+
+    info "waiting for the database"
+    wait_for_db
+
+    if [ "$skip_seed" = 1 ]; then
+        info "skipping the database seed (--no-seed)"
+    elif db_seeded; then
+        info "database '$DB_NAME' already holds a FrontAccounting schema — leaving it alone"
+    else
+        db_load "$SEED"
+    fi
+
+    # Before the HTTP check, not after: without vendor/ there is no Slim and no
+    # application to answer it.
+    sync_deps
+
+    info "waiting for the application"
+    wait_for_http
+
+    cmd_info
+}
+
+cmd_db() {
+    local sub="${1:-}"
+    shift || true
+    case "$sub" in
+        load)   db_load "${1:-$SEED}" ;;
+        reset)  db_drop; db_load "${1:-$SEED}" ;;
+        drop)   db_drop ;;
+        dump)   db_dump "$@" ;;
+        shell)  cmd_mysql ;;
+        *) die "usage: fa-api db <load [test|test-2.3|new|demo|<path>]|reset|drop|dump [file]|shell>" ;;
+    esac
+}
+
+# Every dataset has the stock 0_ prefix baked into all 500-odd statements.
+# Rewrite it on the way in when DB_PREFIX says otherwise, rather than loading a
+# schema FrontAccounting cannot see.
+prefix_filter() {
+    if [ "$DB_PREFIX" = "0_" ]; then
+        cat
+    else
+        sed "s/\`0_/\`$DB_PREFIX/g"
+    fi
+}
+
+db_load() {
+    local which="$1" src='' in_image=''
+    ensure_running
+    wait_for_db
+
+    case "$which" in
+        # This module's own fixtures — the ones .travis.yml loaded, holding the
+        # test/test login the suite authenticates with.
+        test)     src="$PROJECT_ROOT/tests/data/fa_test.sql.gz" ;;
+        test-2.3) src="$PROJECT_ROOT/tests/data/fa_test_2.3.sql.gz" ;;
+        # FrontAccounting's own installer datasets, which live in the image.
+        new)      in_image="$FA_DIR/sql/en_US-new.sql" ;;
+        demo)     in_image="$FA_DIR/sql/en_US-demo.sql" ;;
+        *)
+            src="$which"
+            [ -f "$src" ] || die "unknown dataset '$which' — use test, test-2.3, new, demo, or a path to a .sql/.sql.gz file"
+            ;;
+    esac
+    [ -n "$in_image" ] || [ -f "$src" ] || die "dataset file not found: $src"
+
+    # The account and grant come from MYSQL_USER/MYSQL_DATABASE, which the
+    # mariadb entrypoint applies only when it initialises an empty volume — so
+    # changing DB_NAME or DB_USER later would otherwise leave FA locked out of
+    # its own database.
+    db_mysql -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\`;
+                 CREATE USER IF NOT EXISTS '$DB_USER'@'%' IDENTIFIED BY '$DB_PASSWORD';
+                 GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'%';"
+
+    if [ -n "$in_image" ]; then
+        info "loading $(basename "$in_image") into '$DB_NAME'"
+        c_exec cat "$in_image" | prefix_filter | db_mysql "$DB_NAME"
+    else
+        info "loading $(basename "$src") into '$DB_NAME'"
+        if [ "${src##*.}" = "gz" ]; then
+            gunzip -c "$src" | prefix_filter | db_mysql "$DB_NAME"
+        else
+            prefix_filter < "$src" | db_mysql "$DB_NAME"
+        fi
+    fi
+
+    case "$which" in
+        test|test-2.3) info "loaded — the suite's API credentials are company 0, test / test" ;;
+        new|demo) info "loaded — installer login: admin / password (FrontAccounting defaults)" ;;
+    esac
+}
+
+db_drop() {
+    ensure_running
+    wait_for_db
+    info "dropping database '$DB_NAME'"
+    db_mysql -e "DROP DATABASE IF EXISTS \`$DB_NAME\`; CREATE DATABASE \`$DB_NAME\`;
+                 GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'%';"
+}
+
+db_dump() {
+    ensure_running
+    wait_for_db
+    local out="${1:-$PROJECT_ROOT/tmp/$DB_NAME-$(date -u +%Y%m%d%H%M%S).sql.gz}"
+    mkdir -p "$(dirname "$out")"
+    info "dumping '$DB_NAME' to $out"
+    compose exec -T "$DB_SERVICE" \
+        mysqldump -u root -p"$DB_ROOT_PASSWORD" --single-transaction "$DB_NAME" \
+        | gzip > "$out"
+}
+
+# vendor/ is gitignored and derived from composer.lock, so the stack owns it:
+# `up` brings it into line with whatever branch is checked out rather than
+# trusting what happens to be on disk.
+#
+# It is worth the few seconds this costs when nothing changes. A vendor/ left
+# over from another branch fails in a way that takes an hour to read: the Slim 4
+# tree from feature/php8 under master's Slim 2 index.php is a class-not-found
+# fatal, and FrontAccounting's output_html() strips "Fatal error:" out of the
+# response — so the API answers 200 with an empty body, and the only trace is a
+# run of "mysqli_query() expects parameter 1 to be mysqli, null given" in
+# tmp/errors.log, from FA's shutdown handler running without a connection.
+sync_deps() {
+    info "installing the module's composer dependencies"
+    cmd_composer install
+    require_phpunit
+}
+
+require_phpunit() {
+    c_exec test -s "$APP_DIR/$PHPUNIT" 2>/dev/null \
+        || die "phpunit is missing from vendor/.
+Run 'docker/fa-api composer install', or remove vendor/ and run it again."
+}
+
+cmd_test() {
+    ensure_running
+    require_phpunit
+    # The suite drives Apache over HTTP rather than calling into the code, so
+    # the application has to be answering before the first assertion.
+    wait_for_http
+    c_exec_user php "$PHPUNIT" -c phpunit.xml "$@"
+}
+
+# php -l is the only static gate this project has; phpcs is advisory until the
+# PSR-2 debt in src/ and tests/ is paid off, which is why it does not fail the
+# command unless asked.
+cmd_lint() {
+    local strict=0
+    [ "${1:-}" = "--strict" ] && strict=1
+
+    ensure_running
+
+    info "php -l (PHP $PHP_VERSION)"
+    c_exec_user sh -c '
+        status=0
+        for f in $(find . -path ./vendor -prune -o -path ./node_modules -prune \
+                        -o -path ./public -prune -o -path ./docker -prune \
+                        -o \( -name "*.php" -o -name "*.inc" \) -print | sort); do
+            if ! out=$(php -l "$f" 2>&1); then
+                printf "%s\n" "$out"
+                status=1
+            fi
+        done
+        [ "$status" = 0 ] && echo "no syntax errors"
+        exit $status
+    '
+
+    # tests/data holds FrontAccounting's own fixture config files, copied from
+    # FA and formatted like FA. Measuring them against PSR-2 says nothing about
+    # this module and buries the part that does under 200 violations.
+    info "phpcs --standard=PSR2 src tests"
+    if c_exec_user phpcs --standard=PSR2 --report=summary --ignore='*/tests/data/*' src tests; then
+        return 0
+    fi
+
+    if [ "$strict" = 1 ]; then
+        die "phpcs reported violations (--strict)"
+    fi
+    warn "phpcs reported violations — not failing the command.
+     Run 'docker/fa-api exec phpcs --standard=PSR2 src tests' for the detail,
+     or 'docker/fa-api lint --strict' to make them count."
+}
+
+cmd_composer() {
+    ensure_running
+    c_exec_user composer "$@"
+}
+
+cmd_shell() {
+    ensure_running
+    compose exec -w "$APP_DIR" --user "$USER_UID:$USER_GID" -e HOME=/tmp \
+        "$SERVICE" bash
+}
+
+cmd_exec() {
+    [ $# -gt 0 ] || die "usage: fa-api exec <command> [args...]"
+    ensure_running
+    c_exec_user "$@"
+}
+
+cmd_mysql() {
+    ensure_running
+    local tty_args=()
+    [ -t 0 ] && [ -t 1 ] || tty_args=(-T)
+    compose exec "${tty_args[@]}" "$DB_SERVICE" \
+        mysql -u root -p"$DB_ROOT_PASSWORD" "$DB_NAME" "$@"
+}
+
+cmd_logs() {
+    local what="${1:-app}"
+    shift || true
+
+    # Follow when someone is watching, print and exit when this is piped or run
+    # in CI — where -f would hang the job rather than show the failure.
+    local follow=()
+    [ -t 1 ] && [ $# -eq 0 ] && follow=(-f)
+
+    case "$what" in
+        app|db|phpmyadmin) compose logs "${follow[@]}" "$@" "$what" ;;
+        all) compose logs "${follow[@]}" "$@" ;;
+        errors)
+            ensure_running
+            c_exec tail -n 200 "$FA_DIR/tmp/errors.log"
+            ;;
+        *) die "usage: fa-api logs [app|db|phpmyadmin|errors|all] [compose args...]" ;;
+    esac
+}
+
+# Deliberately root, unlike the other exec commands: chown is the one thing here
+# that needs to be.
+cmd_perms() {
+    ensure_running
+    info "restoring ownership of the checkout to $USER_UID:$USER_GID"
+    c_exec chown -R "$USER_UID:$USER_GID" "$APP_DIR/vendor" 2>/dev/null || true
+}
+
+# What the GitHub Actions workflow runs, in one command, so the same sequence
+# can be reproduced locally before pushing.
+cmd_ci() {
+    cmd_up --build
+    cmd_lint
+    cmd_test "$@"
+}
+
+cmd_info() {
+    local state='not running' fa_commit='—'
+    if running; then
+        state='running'
+        fa_commit="$(c_exec git -C "$FA_DIR" log -1 --format='%h %ad %s' --date=short 2>/dev/null | cut -c1-60)"
+    fi
+
+    cat <<EOF
+
+  Stack         $COMPOSE_PROJECT_NAME ($state)
+  PHP           $PHP_VERSION (xdebug mode: $XDEBUG_MODE)
+  Database      mariadb $MARIADB_VERSION
+
+  API           http://localhost:${HTTP_PORT}/modules/api/
+  FrontAccounting  http://localhost:${HTTP_PORT}/
+  phpMyAdmin    http://localhost:${PMA_PORT}/      (fa-api up --with-tools)
+
+  FA source     $FA_REPO @ $FA_REF
+                $fa_commit
+  Database      $DB_NAME as $DB_USER, tables prefixed '$DB_PREFIX'
+                from the host: mysql -h 127.0.0.1 -P ${DB_PORT} -u $DB_USER -p$DB_PASSWORD $DB_NAME
+
+  This checkout $PROJECT_ROOT -> $APP_DIR
+
+  Try it        curl -H 'X-COMPANY: 0' -H 'X-USER: test' -H 'X-PASSWORD: test' \\
+                  http://localhost:${HTTP_PORT}/modules/api/category/
+
+EOF
+}
+
+cmd_destroy() {
+    if [ "${1:-}" != "--yes" ]; then
+        warn "this removes the containers and the database volume"
+        printf 'Type the project name (%s) to confirm: ' "$COMPOSE_PROJECT_NAME"
+        local answer
+        read -r answer
+        [ "$answer" = "$COMPOSE_PROJECT_NAME" ] || die "aborted"
+    fi
+    compose --profile tools down -v --remove-orphans
+    info "destroyed '$COMPOSE_PROJECT_NAME'"
+}
+
+cmd_help() {
+    cat <<'EOF'
+fa-api — drive the API module's test stack from the host.
+
+Usage: docker/fa-api <command> [args...]
+
+Stack
+  init [--force]     Write docker/.env pinning this checkout to free host ports
+  up [options]       Build, boot and seed the database
+                     --build        rebuild the image first
+                     --recreate     recreate the containers
+                     --no-seed      leave the database alone
+                     --with-tools   also start phpMyAdmin
+  stop | start | restart
+  build | rebuild    Build the image (rebuild ignores the cache)
+  destroy [--yes]    Remove the containers and the database volume
+  ps                 Container status
+  info               URLs, credentials, the FA commit in the image
+
+Database
+  db load [what]     Load a dataset:
+                       test      tests/data/fa_test.sql.gz (default)
+                       test-2.3  tests/data/fa_test_2.3.sql.gz
+                       new       FrontAccounting's sql/en_US-new.sql
+                       demo      FrontAccounting's sql/en_US-demo.sql
+                       <path>    any .sql or .sql.gz file on the host
+  db reset [what]    Drop the database and load it again
+  db drop            Drop and recreate it empty
+  db dump [file]     mysqldump to a .sql.gz (default: tmp/<db>-<stamp>.sql.gz)
+  db shell           mysql client on the application database
+
+Testing and development
+  test [args]        Run the PHPUnit suite, installing composer deps on first use
+  lint [--strict]    php -l over the module, then phpcs PSR-2 on src/ and tests/.
+                     phpcs is advisory unless --strict.
+  ci [args]          up --build, then lint, then test — what CI runs
+  composer [args]    composer in the module directory, as you
+  shell              bash there
+  exec <cmd>         Run a command there
+  logs [what]        app (default), db, phpmyadmin, errors, all. Follows when
+                     attached to a terminal, prints and exits when piped.
+  perms              Give vendor/ back to the host user
+
+How it fits together
+  FrontAccounting is not a dependency this module can install — it is the
+  application the module plugs into. So the image clones it (FA_REPO/FA_REF,
+  upstream master by default) to /var/www/html, and this checkout is
+  bind-mounted at /var/www/html/modules/api. Edits are live on the next request.
+
+  Apache listens on 8000 inside the container because tests/TestEnvironment.php
+  asks for http://localhost:8000 and phpunit runs in there with it. On the host
+  it is HTTP_PORT, 8090 by default.
+
+  config.php, config_db.php, installed_extensions.php and
+  lang/installed_languages.inc are generated by the entrypoint on every start.
+  They land in the image's FA tree, never in your checkout.
+
+  Settings live in docker/.env (gitignored); docker/.env.example lists them all.
+
+Examples
+  docker/fa-api init
+  docker/fa-api up --build
+  docker/fa-api test --filter CategoryTest
+  docker/fa-api db reset
+  PHP_VERSION=8.3 docker/fa-api up --build     # what feature/php8 is aiming at
+EOF
+}
+
+# ---------------------------------------------------------------------------
+
+command -v docker >/dev/null 2>&1 || die "docker is not installed or not on PATH"
+docker compose version >/dev/null 2>&1 || die "the docker compose plugin is required"
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+    init) cmd_init "$@" ;;
+    up) cmd_up "$@" ;;
+    db) cmd_db "$@" ;;
+    test) cmd_test "$@" ;;
+    lint) cmd_lint "$@" ;;
+    ci) cmd_ci "$@" ;;
+    composer) cmd_composer "$@" ;;
+    stop) compose stop "$@" ;;
+    start) compose start "$@" ;;
+    restart) compose restart "$@" ;;
+    build) compose build "$@" ;;
+    rebuild) compose build --no-cache "$@" ;;
+    destroy|down) cmd_destroy "$@" ;;
+    ps|status) compose ps "$@" ;;
+    info|url) cmd_info ;;
+    logs) cmd_logs "$@" ;;
+    perms) cmd_perms ;;
+    mysql) cmd_mysql "$@" ;;
+    shell|bash) cmd_shell ;;
+    exec) cmd_exec "$@" ;;
+    help|-h|--help) cmd_help ;;
+    *) die "unknown command '$cmd' — run 'docker/fa-api help'" ;;
+esac
