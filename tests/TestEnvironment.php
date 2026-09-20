@@ -5,6 +5,8 @@ require_once(__DIR__ . '/TestConfig.php');
 
 class TestEnvironment
 {
+    /** Bumped by every createId() so two callers in the same second differ. */
+    private static $sequence = 0;
 
     /**
      *
@@ -103,9 +105,22 @@ class TestEnvironment
         }
     }
 
+    /**
+     * An id nothing else in this run has used.
+     *
+     * date('YmdHis') alone is not one: the whole suite runs inside a single
+     * second, so every caller got the same string back. That was survivable
+     * only while the one test that leaves its row behind happened to run after
+     * the one that creates and deletes the same id — reorder them and the
+     * second POST finds the row already there, which FrontAccounting reports
+     * as a 200 rather than a 201. The counter makes the id unique within the
+     * process, which is where the suite runs.
+     *
+     * Stays inside 0_stock_master.stock_id's varchar(20): 14 + 3 characters.
+     */
     public static function createId()
     {
-        return date('YmdHis');
+        return date('YmdHis') . sprintf('%03d', self::$sequence++);
     }
 
     /**
