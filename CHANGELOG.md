@@ -2,6 +2,15 @@
 
 #### September 2026
 
+- 21 Sep: Fix credit notes (`trans_type` 11), which could not be posted at all.
+  The cart was given a sales type id but nothing that hangs off it, and a credit
+  note is the one sales document written straight to `debtor_trans` — an invoice
+  goes by way of a sales order that FrontAccounting reads back, which fills the
+  tax treatment in on the way. Under `sql_mode=STRICT_ALL_TABLES` the empty
+  `tax_included` was rejected and the caller got a 200 carrying page HTML. The
+  sales type is now applied through `set_sales_type()` when adding and when
+  editing, so the tax treatment follows the type that was posted, and a sales
+  type that does not exist is answered with a 400 instead of failing the write.
 - 21 Sep: Run on PHP 8.3, and gate CI on both 7.4 and 8.3. Slim 2 still calls
   `get_magic_quotes_gpc()`, removed in PHP 8.0, and `session-custom.inc` let
   FrontAccounting's `init()` query the database before the API had opened a
