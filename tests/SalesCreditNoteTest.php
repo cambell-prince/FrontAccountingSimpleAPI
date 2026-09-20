@@ -395,7 +395,11 @@ class SalesCreditNoteTest extends TestCase
         $body = json_decode($response->getBody());
         $this->assertNotNull($body, 'The rejection was not JSON');
         $this->assertNotEmpty($body->msg, 'The rejection carried no message');
-        $this->assertEquals(0, $this->credited($before, $after, self::RECEIVABLES), 'Nothing should have been rewritten');
+        $this->assertEquals(
+            0,
+            $this->credited($before, $after, self::RECEIVABLES),
+            'Nothing should have been rewritten'
+        );
 
         $note = $this->creditNote($transNo);
         $this->assertEquals(self::SALES_TYPE_INCLUSIVE, $note->sales_type);
@@ -432,6 +436,7 @@ class SalesCreditNoteTest extends TestCase
         $this->assertEquals(self::SALES_TYPE_INCLUSIVE, $note->sales_type);
         $this->assertEquals(2, $note->display_total);
     }
+
     /**
      * A sales type that does not exist is answered, not written.
      *
