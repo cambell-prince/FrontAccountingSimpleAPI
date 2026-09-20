@@ -1,0 +1,4 @@
+# Shell scripts run in Linux containers and on CI: keep LF whatever core.autocrlf says.
+# A CRLF shebang line makes the container fail with "exec ...: no such file or directory".
+*.sh text eol=lf
+docker/fa-api text eol=lf
