@@ -1,23 +1,34 @@
 # Tech Stack
 
-- **PHP** — code targets 5.6/7.0 (Travis matrix). Local CLI is 8.3, which this code does *not*
-  run on unmodified; see `mem:php8_migration`.
-- **Slim 2.6.3** (`slim/slim ~2.6.3`) — the only runtime dependency. Slim 2 idioms everywhere:
-  `new \Slim\Slim(...)`, `\Slim\Slim::getInstance('SASYS')`, `$app->hook('slim.before', ...)`,
-  `$rest->container->singleton(...)`, `$app->halt()`, `:param` route placeholders.
-  Do not copy Slim 3/4 patterns into `master`.
-- **Composer** with PSR-4 `FAAPI\` → `src/`. `vendor/` is gitignored; `vendor/autoload.php` is
-  included by `index.php`. Note the checked-in `vendor/` on disk may have been installed from the
-  `feature/php8` lock and not match `master`'s `composer.lock`.
-- **Dev deps**: `phpunit/phpunit ~4.2.6` (so tests use `PHPUnit_Framework_TestCase`, not the
-  namespaced class), `guzzlehttp/guzzle ~6.3` (test HTTP client),
-  `zircote/swagger-php ^2.0` (`@SWG\*` annotations, v2 syntax — not OpenAPI 3 `@OA\*`).
-- **MySQL/MariaDB** via FA core's db layer; this module opens no connections of its own.
-- **Node/npm** — build tooling only. `gulp ~3.9` (needs an old node, e.g. nvm `lts/dubnium`;
-  gulp 3 will not run on modern node), plus `gulp-sequence`, `lodash.template`, `async`.
-  `package.json` is named "frontaccounting-wrapper" and is shared lineage with the FA repo's.
-- **Docs**: swagger-php generates `swagger.json`; `spectacle` (expected **globally** installed,
-  `npm i -g spectacle-docs`) renders static HTML into `public/` (gitignored) for `gh-pages`.
-- **Travis CI** (`.travis.yml`, legacy) — clones FA master into `_frontaccounting`, rsyncs this
-  tree into `_frontaccounting/modules/api/`, starts `php -S localhost:8000`, runs `gulp test-travis`.
-- **Xdebug**: `.vscode/launch.json` listens on port 9003.
+- **PHP** — 7.4 is the version the suite is green on and what CI gates; the code
+  still avoids 8-only syntax. Local CLI is 8.3, which master does not run on
+  (see [[php8_migration]]).
+- **Slim 2.6.3** (`slim/slim ~2.6.3`) — the only runtime dependency. Slim 2
+  idioms everywhere: `new \Slim\Slim(...)`, `\Slim\Slim::getInstance('SASYS')`,
+  `$app->hook('slim.before', ...)`, `$rest->container->singleton(...)`,
+  `$app->halt()`, `:param` routes. Do not copy Slim 3/4 patterns into master.
+- **Composer** with PSR-4 `FAAPI\` → `src/`, and **composer scripts as the task
+  runner**: `test`, `lint`, `cs:check`, `cs:fix`, `analyze`, `quality`, `ci`.
+  `vendor/` is gitignored and owned by the docker stack, which reinstalls it
+  from the lock on every `up`.
+- **Dev deps**: `phpunit/phpunit ~4.2.6` (so tests extend
+  `PHPUnit_Framework_TestCase`), `guzzlehttp/guzzle ~6.3` (the suite's HTTP
+  client), `zircote/swagger-php ^2.0` (`@SWG\*`, v2 syntax — not OpenAPI 3
+  `@OA\*`), `squizlabs/php_codesniffer ^3.7`, `phpstan/phpstan ^1.10`.
+- **phpcs** — PSR-2 over `src/` and `tests/` via `phpcs.xml`. Not clean (125
+  errors), so deliberately not in `quality`/`ci`; reported but not gating.
+- **PHPStan** — `phpstan.neon`, level 0 and clean. It resolves FrontAccounting's
+  symbols with `scanDirectories: ../../includes` etc. plus
+  `fileExtensions: [php, inc]`, which is the part that makes FA's `.inc`
+  codebase visible at all. `scanFiles` covers the constants and `api_*` helpers
+  that are included at runtime rather than autoloaded.
+- **phpmake** (saygoweb/phpmake) — `makefile.json` holds the multi-step builds
+  composer scripts fit badly: `docs-json`, `docs`, `package`, `clean`. Installed
+  as `make.phar` on PATH; built into the docker image.
+- **MySQL/MariaDB** via FA's db layer; this module opens no connections.
+- **No node.** gulp, `package.json` and `.travis.yml` were removed on
+  2026-09-20. The one thing that still wants node is `spectacle`, for rendering
+  `swagger.json` into the `gh-pages` HTML, and it is expected globally on the
+  host at release time.
+- **CI** — `.github/workflows/ci.yml`, driving `docker/fa-api` (see [[docker]]).
+- **Xdebug** — `.vscode/launch.json` listens on 9003.

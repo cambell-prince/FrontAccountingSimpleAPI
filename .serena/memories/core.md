@@ -63,7 +63,7 @@ itemcosts→`InventoryCosts`, sales→`Sales`, dimensions→`Dimensions`, journa
 
 ## Further reading
 
-- Slim/composer/php versions and pins, and the node build chain: `mem:tech_stack`
+- Slim/composer/php versions and pins, and the composer/phpmake toolchain: `mem:tech_stack`
 - Running the server, tests, docs and packaging: `mem:suggested_commands`
 - Code style, the controller/route/Swagger-annotation pattern: `mem:conventions`
 - Test harness, fixture db and the running-server requirement: `mem:testing`

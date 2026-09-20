@@ -8,12 +8,15 @@ The supported way to run them is the docker stack (`mem:docker`), which supplies
 the FrontAccounting tree, the fixture database and the server in one command.
 Everything below is what it automates, and what to do without it.
 
+Green as of 2026-09-20: 19 tests, 216 assertions, on PHP 7.4 against FA master.
+
 **These are HTTP integration tests, not unit tests.** Each one drives a Guzzle client against
 `http://localhost:8000` (`TestEnvironment::client()`) hitting `/modules/api/...`, with the
 `X-COMPANY: 0` / `X-USER: test` / `X-PASSWORD: test` headers from `TestEnvironment::headers()`.
-Nothing is mocked; a **running PHP server and a populated `fa_test` database are prerequisites**
-(`sh build-startServer.sh`, `npx gulp env-db`). A failing suite usually means the server is down,
-`_frontaccounting` is shadowing `FA_ROOT` (see `mem:core`), or the db was not reloaded.
+Nothing is mocked; a **running PHP server and a populated `fa_test` database are prerequisites**,
+which `docker/fa-api up` provides. A failing suite usually means the stack is not up,
+`_frontaccounting` is shadowing `FA_ROOT` (see `mem:core`), or the db was not reloaded
+(`docker/fa-api db reset`).
 
 ## Harness
 
@@ -28,11 +31,14 @@ Prefer extending `Crud_Base` for a new resource; write a standalone `*_Test.php`
 
 ## Fixtures
 
-`tests/data/` holds `fa_test.sql.gz` (+ a 2.3 copy), `config.php`, `config_db.php`,
-`installed_extensions.php`. The db connection is hard-coded: host `localhost`, db `fa_test`,
-user `travis` with an **empty password**, prefix `0_`, company 0. `gulp env-files` copies these
-over `_frontaccounting/` — that is the CI layout only; in a normal FA checkout it would clobber
-the real config, so do not run it there.
+`tests/data/` holds `fa_test.sql.gz` (+ a 2.3 copy) and FrontAccounting's `config.php`,
+`config_db.php` and `installed_extensions.php`. Only the dumps matter now: the docker stack
+generates FA's config itself and loads the dump. The config fixtures are left as documentation of
+a working install, and phpcs excludes `tests/data/`.
+
+**Two tests depend on execution order.** `SalesTest` posts a hard-coded `customer_id=2`, so it
+passes only in a full run; `JournalTest` posts its own unique reference precisely so it does not.
+Reproduce CI with a full `docker/fa-api test`, not `--filter`.
 
 Tests create records with timestamp-derived refs and mostly clean up after themselves; a crashed
-run can leave rows behind — reload with `npx gulp env-db`.
+run can leave rows behind — reload with `docker/fa-api db reset`.

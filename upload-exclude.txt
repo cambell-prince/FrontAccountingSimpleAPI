@@ -1,14 +1,18 @@
 .git
 .gitignore
+.github
+.serena
 .hg
 .hgtags
 .hgignore
 _frontaccounting
 node_modules
-gulpfile.js
+log
+docker
+makefile.json
 composer.*
-package.json
-bower.json
+phpcs.xml
+phpstan.neon
 upload-exclude.txt
 upload-exclude-zip.txt
 *.zip
@@ -16,4 +20,3 @@ upload-exclude-zip.txt
 tests
 phpunit.xml
 build*
-.travis.yml

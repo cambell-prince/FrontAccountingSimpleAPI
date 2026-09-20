@@ -275,7 +275,11 @@ function sales_add() {
 		$cart->deliver_to				= $info['deliver_to'];
 		$cart->delivery_address	= $info['delivery_address'];
 		$cart->phone						= $info['phone'];
-		$cart->ship_via					= $info['ship_via'];
+		// sales_orders.ship_via is a shipper id, an integer column. Non-strict
+		// MySQL used to coerce whatever arrived here; FrontAccounting now connects
+		// with sql_mode=STRICT_ALL_TABLES, which rejects a non-numeric string
+		// outright and loses the whole order.
+		$cart->ship_via					= (int)$info['ship_via'];
 	}
 
 	$cart->Location			= $info['location'];
@@ -290,6 +294,12 @@ function sales_add() {
 	$cart->customer_id	= $info['customer_id'];
 	$cart->Branch				= $info['branch_id'];
 	$cart->sales_type		= $info['sales_type'];
+
+	// FrontAccounting writes $cart->payment into sales_orders.payment_terms,
+	// another integer column. The cart is filled by property assignment rather
+	// than through Cart::set_customer(), so it is never given the customer's
+	// terms and stays null — again rejected under STRICT_ALL_TABLES.
+	$cart->payment			= (int)$cart->payment;
 
 	if ($cart->trans_type != ST_SALESORDER && $cart->trans_type != ST_SALESQUOTE) { // 2008-11-12 Joe Hunt
 		$cart->dimension_id		= $info['dimension_id'];
@@ -395,7 +405,7 @@ function sales_edit($trans_no, $trans_type) {
 		if (isset($info["phone"]))
 			$cart->phone						= $info['phone'];
 		if (isset($info["ship_via"]))
-			$cart->ship_via					= $info['ship_via'];
+			$cart->ship_via					= (int)$info['ship_via'];
 	}
 
 	if (isset($info["location"]))

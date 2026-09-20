@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<ruleset name="FrontAccounting Simple API">
+    <description>Coding standard for the FrontAccounting API module.</description>
+
+    <!-- PSR-2, as README.md has always said, rather than PSR-12: this code is
+         written for PHP 5.6/7.x and PSR-12's typed-property and return-type
+         rules have nothing to measure here. -->
+    <rule ref="PSR2"/>
+
+    <!-- src/ and tests/ only. The procedural *.inc files at the root are older
+         FrontAccounting-style code, tab-indented and deliberately so; measuring
+         them against PSR-2 produces hundreds of violations nobody intends to
+         fix. php -l covers them (composer lint). -->
+    <file>src</file>
+    <file>tests</file>
+
+    <!-- FrontAccounting's own fixture config, copied from FA and formatted like
+         FA. Not ours to restyle. -->
+    <exclude-pattern>tests/data/*</exclude-pattern>
+
+    <exclude-pattern>vendor/*</exclude-pattern>
+
+    <!-- Progress, colours, and sniff codes in the report so a violation can be
+         looked up or excluded by name. -->
+    <arg value="p"/>
+    <arg name="colors"/>
+    <arg value="s"/>
+</ruleset>

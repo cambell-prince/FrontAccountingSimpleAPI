@@ -55,6 +55,9 @@ jobs:
       - name: Lint
         run: docker/fa-api lint
 
+      - name: Analyze
+        run: docker/fa-api analyze
+
       - name: Test
         run: docker/fa-api test
 

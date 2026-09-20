@@ -1,5 +1,26 @@
 # CHANGELOG
 
+#### September 2026
+
+- 20 Sep: Run on PHP 7.4 with a green test suite. FrontAccounting connects with
+  `sql_mode=STRICT_ALL_TABLES`, which rejects the `''` this module passed to the
+  integer and date columns behind customers, dimensions, stock adjustments and
+  sales orders; each now gets a storable default.
+- 20 Sep: Fix `/exrates/{curr_abrev}`, which queried an empty currency code —
+  `Currencies::getLastExchangeRate()` used an `$id` that was never defined.
+  Found by PHPStan.
+- 20 Sep: Drop `strip_quotes()` and its call on `$_POST`. It was built on
+  `get_magic_quotes_gpc()`, deprecated in PHP 7.4 and removed in 8.0, and magic
+  quotes themselves went in PHP 5.4.
+- 20 Sep: Replace gulp and Travis with composer scripts (`test`, `lint`,
+  `cs:check`, `analyze`, `quality`, `ci`) and [phpmake](https://github.com/saygoweb/phpmake)
+  targets in `makefile.json` for the docs and release builds. No node toolchain
+  is needed any more.
+- 20 Sep: Add phpcs (PSR-2, `phpcs.xml`) and PHPStan (`phpstan.neon`, level 0,
+  resolving FrontAccounting's symbols from `../..`).
+- 20 Sep: Regenerate `swagger.json`, which had drifted from the annotations —
+  it was missing the trial balance endpoint added in July 2018.
+
 #### July 2018
 
 - 03 Jul: Fixed #46 Trial Balance feature at endpoint /glquery/trialbalance/{startDate}/{endDate}
