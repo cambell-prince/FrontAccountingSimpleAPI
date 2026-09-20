@@ -78,12 +78,14 @@ class Customers
             $info['notes'] = '';
         }
 
-        // For default branch
+        // For default branch. These are integer columns (salesman, area), so the
+        // default has to be 0 and not '': FrontAccounting connects with
+        // sql_mode=STRICT_ALL_TABLES, which rejects '' for an integer.
         if (! isset($info['salesman'])) {
-            $info['salesman'] = '';
+            $info['salesman'] = 0;
         }
         if (! isset($info['area'])) {
-            $info['area'] = '';
+            $info['area'] = 0;
         }
         if (! isset($info['tax_group_id'])) {
             $info['tax_group_id'] = '1';

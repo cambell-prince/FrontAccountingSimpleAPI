@@ -105,7 +105,11 @@ class SalesTest extends PHPUnit_Framework_TestCase
         $expected->cust_ref = "cust_ref";
         $expected->delivery_address = "delivery_address";
         $expected->ship_via = "0";
-        $expected->deliver_to = "Test Customer";
+        // The API stores the posted deliver_to. This expected the branch name
+        // instead, from a FrontAccounting that overwrote it out of cust_branch
+        // during write; nothing does that now, and echoing back what was posted
+        // is the behaviour to keep.
+        $expected->deliver_to = "deliver_to";
         $expected->delivery_date = "03/04/2013";
         $expected->location = null;
         $expected->freight_cost = "0";
@@ -187,7 +191,12 @@ class SalesTest extends PHPUnit_Framework_TestCase
         $expected->cust_ref = "cust_ref";
         $expected->delivery_address = "delivery_address";
         $expected->ship_via = "0";
-        $expected->deliver_to = "Test Customer";
+        // Unchanged by the PUT, and not a regression: deliver_to is a column of
+        // sales_orders, while updating an invoice writes debtor_trans. FA does
+        // not propagate it back to the originating order, so the invoice keeps
+        // the value it was created with. delivery_date does change, because that
+        // maps to debtor_trans.due_date.
+        $expected->deliver_to = "deliver_to";
         $expected->delivery_date = "04/05/2013";
         $expected->location = null;
         $expected->freight_cost = "0";

@@ -29,7 +29,10 @@ Free software under GNU GPL
  *   @SWG\Info(
  *     version="2.4-1.7",
  *     title="Front Accounting Simple API",
- *     description="This is a simple REST API as a Front Accounting module [https://github.com/andresamayadiaz/FrontAccountingSimpleAPI](https://github.com/andresamayadiaz/FrontAccountingSimpleAPI).",
+ *     description="This is a simple REST API as a Front Accounting module [https://github.com/cambell-prince/FrontAccountingSimpleAPI](https://github.com/cambell-prince/FrontAccountingSimpleAPI).",
+ *     @SWG\Contact(
+ *       email="cambell.prince@gmail.com"
+ *     ),
  *     @SWG\License(
  *       name="GPL V2.0",
  *       url="https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html"

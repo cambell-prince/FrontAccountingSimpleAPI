@@ -179,6 +179,3 @@ if (!defined('FA_LOGOUT_PHP_FILE')){
 	}
 }
 
-// POST vars cleanup needed for direct reuse.
-// We quote all values later with db_escape() before db update.
-$_POST = strip_quotes($_POST);

@@ -58,6 +58,12 @@ function stock_adjustment_add()
 
 	$_SESSION['adj_items']->tran_date = $info['date'];
 	$_SESSION['gl_items']->tran_date = $info['date'];
+	// items_cart declares event_date and doc_date but leaves them null, and
+	// write_journal_entries() passes them straight to add_journal(), where
+	// date2sql(null) is '' — which a date column rejects under
+	// sql_mode=STRICT_ALL_TABLES.
+	$_SESSION['gl_items']->event_date = $info['date'];
+	$_SESSION['gl_items']->doc_date = $info['date'];
 	// This should never happen
 	if ($_SESSION['adj_items']->find_cart_item($info['stock_id']))
 		api_error(500, 'Item Already Exists In Cart');
