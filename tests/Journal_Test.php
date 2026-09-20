@@ -73,6 +73,11 @@ class JournalTest extends Crud_Base
         $this->keyProperty = 'id';
 
         $this->method = self::FORM_DATA;
+
+        // This class shadows Crud_Base's fields rather than using them, so the
+        // chain up to PHPUnit's own TestCase constructor has to be made
+        // explicitly - PHPUnit 9 leaves internal state null without it.
+        parent::__construct($this->url, $this->keyProperty, $this->postData, $this->putData);
     }
 
     protected function checkCountInitial($count, $result)

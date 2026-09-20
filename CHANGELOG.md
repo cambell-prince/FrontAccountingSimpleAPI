@@ -2,6 +2,21 @@
 
 #### September 2026
 
+- 21 Sep: Run on PHP 8.3, and gate CI on both 7.4 and 8.3. Slim 2 still calls
+  `get_magic_quotes_gpc()`, removed in PHP 8.0, and `session-custom.inc` let
+  FrontAccounting's `init()` query the database before the API had opened a
+  connection.
+- 21 Sep: Fix voiding a journal, which used today's date. `add_audit_trail()`
+  fills `fiscal_year` from a lookup on that date and cannot store null, so a
+  void outside a fiscal year failed — silently on 7.4, and as a 500 on 8.1 and
+  later where mysqli throws. It now voids on the transaction's own date, takes
+  an optional `date`, and reports FrontAccounting's refusal instead of
+  discarding it.
+- 21 Sep: phpunit 4.2 -> ^9.6 and guzzle 6.3 -> ^7.5; both old versions are
+  blocked by security advisories and neither installs on PHP 8. swagger-php
+  moves to `build/swagger/`, because it pins `doctrine/annotations ^1.4`, which
+  cannot be installed on PHP 8 — see `build/swagger/README.md`.
+
 - 21 Sep: Add `POST /payments` to record a customer payment, optionally
   allocated to one document, and `DELETE /payments/{id}` to void one. Bad input
   is answered with 400 and a message rather than FrontAccounting's swallowed

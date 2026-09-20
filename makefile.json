@@ -3,15 +3,24 @@
         "name": "frontaccounting",
         "version": "2.4",
         "release": "-api.module.1.7",
-        "swagger": "vendor/zircote/swagger-php/bin/swagger"
+        "swagger": "build/swagger/vendor/zircote/swagger-php/bin/swagger"
     },
-
+    "swagger-tool": {
+        "provides": [
+            "#file:{{swagger}}"
+        ],
+        "by": [
+            "composer install --no-interaction --working-dir=build/swagger"
+        ]
+    },
     "docs-json": {
+        "depends": [
+            "swagger-tool"
+        ],
         "by": [
             "php {{swagger}} src/ index.php"
         ]
     },
-
     "docs-html": {
         "depends": [
             "docs-json"
@@ -20,26 +29,22 @@
             "spectacle -q swagger.json"
         ]
     },
-
     "docs": {
         "depends": [
             "docs-html"
         ]
     },
-
     "vendor-prod": {
         "by": [
             "rm -rf vendor",
             "composer install --no-dev --no-interaction"
         ]
     },
-
     "vendor-dev": {
         "by": [
             "composer install --no-interaction"
         ]
     },
-
     "package": {
         "depends": [
             "vendor-prod"
@@ -51,7 +56,6 @@
             "composer install --no-interaction"
         ]
     },
-
     "clean": {
         "by": [
             "rm -f *.zip *.tgz"

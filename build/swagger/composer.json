@@ -1,0 +1,11 @@
+{
+    "description": "swagger-php, kept out of the module's own dependencies.",
+    "require": {
+        "zircote/swagger-php": "^2.0"
+    },
+    "config": {
+        "platform": {
+            "php": "7.4.33"
+        }
+    }
+}

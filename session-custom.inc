@@ -175,6 +175,13 @@ if (!defined('FA_LOGOUT_PHP_FILE')){
 	}
 	if (!isset($_SESSION["App"])) {
 		$_SESSION["App"] = new front_accounting();
+		// FA >= 2.4.2x queries company prefs inside init(), before the API's
+		// slim.before login has opened a connection.
+		global $db, $db_connections;
+		if ($db === null) {
+			$company = isset($_SERVER['HTTP_X_COMPANY']) ? (int) $_SERVER['HTTP_X_COMPANY'] : 0;
+			set_global_connection(isset($db_connections[$company]) ? $company : 0);
+		}
 		$_SESSION["App"]->init();
 	}
 }

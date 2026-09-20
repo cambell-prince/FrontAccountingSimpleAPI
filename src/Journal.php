@@ -5,6 +5,8 @@ $path_to_root = "../..";
 
 include_once($path_to_root . "/includes/ui/items_cart.inc");
 include_once($path_to_root . "/gl/includes/db/gl_journal.inc");
+include_once($path_to_root . "/admin/db/fiscalyears_db.inc");
+include_once($path_to_root . "/admin/db/voiding_db.inc");
 
 /**
  * @SWG\Definition(
@@ -378,11 +380,48 @@ class Journal
      */
     public function delete($rest, $type, $id)
     {
-        $existing = $this->getById($rest, $type, $id);
+        // Existence check: getById() answers 404 and stops when there is no
+        // such journal. It writes a response as a side effect, which the one at
+        // the end of this method replaces.
+        $this->getById($rest, $type, $id);
 
-        $msg = void_transaction($type, $id, Today(), _("Document void by api."));
+        $model = $rest->request()->post();
+        \api_check('memo', $model, _("Document void by api."));
+
+        // The transaction's own date, not today's. void_transaction() writes an
+        // audit trail row, and add_audit_trail() fills its fiscal_year from a
+        // lookup by that date - today's date need not be inside a fiscal year,
+        // and then the column is null and the INSERT is rejected. On PHP 8.1
+        // and later mysqli throws, so this surfaced as a 500; on 7.4 it was
+        // swallowed and the void silently did not happen.
+        if (isset($model['date']) && $model['date'] !== '') {
+            \api_validate('date', $model, 400, 'api_validate_date');
+            $date = sql2date($model['date']);
+            if (!is_date_in_fiscalyears($date, false)) {
+                \api_error(400, "The date '{$model['date']}' is not inside an open fiscal year");
+            }
+        } else {
+            $date = $this->transactionDate($type, $id);
+        }
+
+        // A string back means FrontAccounting refused - already voided, or
+        // something downstream depends on it. That is the caller's to fix.
+        $msg = void_transaction($type, $id, $date, $model['memo']);
+        if ($msg != null) {
+            \api_error(400, $msg);
+        }
 
         \api_success_response(array('msg' => 'voided', 'id' => $id));
+    }
+
+    /**
+     * The date a transaction was posted on, in the user's display format.
+     */
+    private function transactionDate($type, $id)
+    {
+        $row = db_fetch_assoc(get_gl_trans($type, $id));
+
+        return $row ? sql2date($row['tran_date']) : Today();
     }
 
 }

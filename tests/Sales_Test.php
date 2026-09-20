@@ -1,6 +1,7 @@
 <?php
 
 use GuzzleHttp\Client;
+use PHPUnit\Framework\TestCase;
 
 require_once(__DIR__ . '/TestConfig.php');
 
@@ -9,7 +10,7 @@ require_once(TEST_PATH . '/TestEnvironment.php');
 $path_to_root = SRC_PATH;
 require_once(SRC_PATH . '/includes/types.inc');
 
-class SalesTest extends PHPUnit_Framework_TestCase
+class SalesTest extends TestCase
 {
     public function testCRUD_Ok()
     {
