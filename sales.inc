@@ -245,6 +245,27 @@ function sales_get($trans_no, $trans_type) {
 	api_success_response(json_encode($info));
 }
 
+/**
+ * Put the sales type on the cart, with everything that hangs off it.
+ *
+ * set_sales_type() also sets tax_included and the price factor; assigning
+ * ->sales_type alone leaves tax_included empty, which a document with no
+ * parent - a credit note - writes straight into an integer column, and
+ * FrontAccounting connects with sql_mode=STRICT_ALL_TABLES. An invoice is
+ * spared only because it is written by way of a sales order that FA reads
+ * back, filling both in on the way.
+ */
+function sales_set_sales_type($cart, $sales_type) {
+	$type = get_sales_type($sales_type);
+
+	if (!$type) {
+		api_error(400, sprintf(_("There is no sales type '%s'."), $sales_type));
+		return;
+	}
+
+	$cart->set_sales_type($type['id'], $type['sales_type'], $type['tax_included'], $type['factor']);
+}
+
 function sales_add() {
 	$app	= \Slim\Slim::getInstance('SASYS');
 	$req	= $app->request();
@@ -293,7 +314,8 @@ function sales_add() {
 
 	$cart->customer_id	= $info['customer_id'];
 	$cart->Branch				= $info['branch_id'];
-	$cart->sales_type		= $info['sales_type'];
+	api_validate('sales_type', $info);
+	sales_set_sales_type($cart, $info['sales_type']);
 
 	// FrontAccounting writes $cart->payment into sales_orders.payment_terms,
 	// another integer column. The cart is filled by property assignment rather
@@ -346,13 +368,12 @@ function sales_add() {
   		return;
   		break;
   	case ST_CUSTCREDIT:
-  		$feeback_response = sprintf(_("Credit Note # %d has been processed."), key($cart->trans_no));
-
-  		if ($cfdi_response != "") {
-  			$feeback_response .= "\r\n".$cfdi_response;
-  		}
-
-  		api_success_response($feeback_response);
+  		// $cfdi_response was appended here, from the Mexican invoicing module
+  		// this API was cut out of. Nothing sets it any more - it is the
+  		// commented out block above, left live in this one branch by mistake -
+  		// so reading it was an undefined variable on the one path that reaches
+  		// it.
+  		api_success_response(sprintf(_("Credit Note # %d has been processed."), key($cart->trans_no)));
   		return;
   		break;
   	case ST_CUSTDELIVERY:
@@ -424,7 +445,7 @@ function sales_edit($trans_no, $trans_type) {
 	if (isset($info["branch_id"]))
 		$cart->Branch				= $info['branch_id'];
 	if (isset($info["sales_type"]))
-		$cart->sales_type		= $info['sales_type'];
+		sales_set_sales_type($cart, $info['sales_type']);
 
 	if ($cart->trans_type != ST_SALESORDER && $cart->trans_type != ST_SALESQUOTE) { // 2008-11-12 Joe Hunt
 		if (isset($info["dimension_id"]))
