@@ -54,7 +54,7 @@ class JournalTest extends Crud_Base
     public function __construct()
     {
         // A journal reference has to be unique and is assigned by
-        // $Refs->get_next() when none is posted. GLQueries_Test runs before this
+        // $Refs->get_next() when none is posted. GLQueriesTest runs before this
         // one and takes the first, so an expectation of '1' held only in
         // isolation. Post a reference of our own and the test stops caring what
         // ran before it.
