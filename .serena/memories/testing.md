@@ -1,14 +1,20 @@
 # Testing
 
-`phpunit.xml` → testsuite = the whole `tests/` directory. PHPUnit 4, so tests extend
-`PHPUnit_Framework_TestCase` (no namespace) and files are named `<Area>_Test.php` with class
-`<Area>Test`.
+`phpunit.xml` → testsuite = the whole `tests/` directory. Tests extend
+`PHPUnit\Framework\TestCase` (no namespace of their own) and files are named `<Class>Test.php`,
+one test class per file.
+
+One class per file is not just PSR-1 tidiness here: when a file declares a class whose
+name matches the file's, PHPUnit adds only that class and silently ignores the others.
+`BankAccountsTest.php` holding `BankAccountsTest` + `BankAccountsOtherTest` would run the
+first and drop the second without a word. Anything shared between two test classes goes in
+a non-`*Test.php` file they both `require_once` (see `tests/CategoryData.php`).
 
 The supported way to run them is the docker stack (`mem:docker`), which supplies
 the FrontAccounting tree, the fixture database and the server in one command.
 Everything below is what it automates, and what to do without it.
 
-Green as of 2026-09-20: 19 tests, 216 assertions, on PHP 7.4 against FA master.
+Green as of 2026-09-21: 23 tests, 268 assertions, on PHP 7.4 against FA master.
 
 **These are HTTP integration tests, not unit tests.** Each one drives a Guzzle client against
 `http://localhost:8000` (`TestEnvironment::client()`) hitting `/modules/api/...`, with the
@@ -26,8 +32,8 @@ which `docker/fa-api up` provides. A failing suite usually means the stack is no
 | `tests/TestEnvironment.php` | Guzzle client, auth headers, fixture factories (`createCustomer`, `createItem`, `createJournal`), `createId()` = `date('YmdHis')`, `cleanTable`/`cleanBanking`, and an in-process FA bootstrap (`isGoodToGo()`) that asserts the db is `fa_test` |
 | `tests/Crud_Base.php` | abstract CRUD suite: constructor takes `($url, $keyProperty, $postData, $putData = null)`; `testCRUD_Ok()` walks list → post → get → put → get → delete → list. Subclasses only pass data and may override `fixExpectedType`, `removeKeyProperty`, `checkCountInitial`, `checkGetAfterPost/Put`. `$this->method` selects `Crud_Base::FORM_DATA` (default) or `::JSON` |
 
-Prefer extending `Crud_Base` for a new resource; write a standalone `*_Test.php` (like
-`Sales_Test.php`, `Journal_Test.php`) only for multi-step or non-CRUD flows.
+Prefer extending `Crud_Base` for a new resource; write a standalone `*Test.php` (like
+`SalesTest.php`, `JournalTest.php`) only for multi-step or non-CRUD flows.
 
 ## Fixtures
 

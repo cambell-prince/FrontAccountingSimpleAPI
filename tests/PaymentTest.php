@@ -59,7 +59,7 @@ class PaymentTest extends TestCase
      * Create a customer and remember the ids FrontAccounting gave it.
      *
      * Deliberately not hard-coded: the fixture ships with no customers at all,
-     * so ids depend on what ran first. Sales_Test assumes customer 2 and passes
+     * so ids depend on what ran first. SalesTest assumes customer 2 and passes
      * only because other tests created one before it.
      */
     private function createCustomer($suffix)
