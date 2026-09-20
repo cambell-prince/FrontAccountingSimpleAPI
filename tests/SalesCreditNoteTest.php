@@ -164,6 +164,44 @@ class SalesCreditNoteTest extends TestCase
     }
 
     /**
+     * Edit one credit note, and return the response.
+     *
+     * A $salesType of null sends none at all.
+     */
+    private function putCreditNote($transNo, $ref, $salesType, $comments)
+    {
+        $params = array(
+            'trans_type' => ST_CUSTCREDIT,
+            'ref' => $ref,
+            'comments' => $comments,
+            'order_date' => self::ORDER_DATE,
+            'delivery_date' => self::DELIVERY_DATE,
+            'cust_ref' => 'cust_ref',
+            'deliver_to' => 'deliver_to',
+            'delivery_address' => 'delivery_address',
+            'phone' => 'phone',
+            'ship_via' => '0',
+            'location' => 'DEF',
+            'freight_cost' => '0',
+            'customer_id' => $this->customerId,
+            'branch_id' => $this->branchId,
+            'sales_type' => $salesType,
+            'dimension_id' => '0',
+            'dimension2_id' => '0',
+        );
+
+        if ($salesType === null) {
+            unset($params['sales_type']);
+        }
+
+        return $this->client->put('/modules/api/sales/' . $transNo . '/' . ST_CUSTCREDIT, array(
+            'headers' => TestEnvironment::headers(),
+            'http_errors' => false,
+            'form_params' => $params
+        ));
+    }
+
+    /**
      * The transaction number FrontAccounting gave the credit note it just
      * wrote, taken from the message the API answers with.
      *
@@ -314,29 +352,7 @@ class SalesCreditNoteTest extends TestCase
         );
 
         $before = $this->trialBalance();
-        $response = $this->client->put('/modules/api/sales/' . $transNo . '/' . ST_CUSTCREDIT, array(
-            'headers' => TestEnvironment::headers(),
-            'http_errors' => false,
-            'form_params' => array(
-                'trans_type' => ST_CUSTCREDIT,
-                'ref' => $suffix,
-                'comments' => 'now wholesale',
-                'order_date' => self::ORDER_DATE,
-                'delivery_date' => self::DELIVERY_DATE,
-                'cust_ref' => 'cust_ref',
-                'deliver_to' => 'deliver_to',
-                'delivery_address' => 'delivery_address',
-                'phone' => 'phone',
-                'ship_via' => '0',
-                'location' => 'DEF',
-                'freight_cost' => '0',
-                'customer_id' => $this->customerId,
-                'branch_id' => $this->branchId,
-                'sales_type' => self::SALES_TYPE_EXCLUSIVE,
-                'dimension_id' => '0',
-                'dimension2_id' => '0',
-            )
-        ));
+        $response = $this->putCreditNote($transNo, $suffix, self::SALES_TYPE_EXCLUSIVE, 'now wholesale');
         $after = $this->trialBalance();
 
         $this->assertEquals('200', $response->getStatusCode());
@@ -353,6 +369,72 @@ class SalesCreditNoteTest extends TestCase
         $note = $this->creditNote($transNo);
         $this->assertEquals(self::SALES_TYPE_EXCLUSIVE, $note->sales_type);
         $this->assertEquals(2.1, $note->display_total);
+    }
+
+    /**
+     * A sales type that does not exist is answered when editing too, and the
+     * note is left as it was.
+     *
+     * sales_edit() takes the sales type through the same lookup as sales_add(),
+     * so an unknown one is a 400 and not a rewrite with whatever tax treatment
+     * the cart happened to hold.
+     */
+    public function testEditWithUnknownSalesTypeRejected()
+    {
+        $suffix = $this->uniqueRef();
+        $this->createCustomerAndItem($suffix);
+        $transNo = $this->assertPosted(
+            $this->postCreditNote($suffix, self::SALES_TYPE_INCLUSIVE, '2')
+        );
+
+        $before = $this->trialBalance();
+        $response = $this->putCreditNote($transNo, $suffix, '99999', 'unknown sales type');
+        $after = $this->trialBalance();
+
+        $this->assertEquals('400', $response->getStatusCode());
+        $body = json_decode($response->getBody());
+        $this->assertNotNull($body, 'The rejection was not JSON');
+        $this->assertNotEmpty($body->msg, 'The rejection carried no message');
+        $this->assertEquals(
+            0,
+            $this->credited($before, $after, self::RECEIVABLES),
+            'Nothing should have been rewritten'
+        );
+
+        $note = $this->creditNote($transNo);
+        $this->assertEquals(self::SALES_TYPE_INCLUSIVE, $note->sales_type);
+        $this->assertEquals(2, $note->display_total);
+    }
+
+    /**
+     * An edit that does not mention the sales type keeps the one the note has.
+     *
+     * The sales type is only put on the cart when the request carries one, so
+     * a note posted under tax inclusive 'Retail' and edited without it is
+     * still credited 2.00, not left without a tax treatment.
+     */
+    public function testEditWithoutSalesTypeKeepsTheOneTheNoteHas()
+    {
+        $suffix = $this->uniqueRef();
+        $this->createCustomerAndItem($suffix);
+        $transNo = $this->assertPosted(
+            $this->postCreditNote($suffix, self::SALES_TYPE_INCLUSIVE, '2')
+        );
+
+        $before = $this->trialBalance();
+        $response = $this->putCreditNote($transNo, $suffix, null, 'comment only');
+        $after = $this->trialBalance();
+
+        $this->assertEquals('200', $response->getStatusCode());
+        $this->assertMatchesRegularExpression(
+            '/^Credit # \d+ has been updated\.$/',
+            trim((string)$response->getBody())
+        );
+        $this->assertEqualsWithDelta(0, $this->credited($before, $after, self::RECEIVABLES), 0.001);
+
+        $note = $this->creditNote($transNo);
+        $this->assertEquals(self::SALES_TYPE_INCLUSIVE, $note->sales_type);
+        $this->assertEquals(2, $note->display_total);
     }
 
     /**
