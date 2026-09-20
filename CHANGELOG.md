@@ -2,6 +2,14 @@
 
 #### September 2026
 
+- 21 Sep: Add `POST /payments` to record a customer payment, optionally
+  allocated to one document, and `DELETE /payments/{id}` to void one. Bad input
+  is answered with 400 and a message rather than FrontAccounting's swallowed
+  E_USER_ERROR, which reaches the caller as a 200 carrying page HTML.
+- 21 Sep: Fix `GET /customers/{id}/branches/`, which inner joined `salesman` and
+  `areas` and so never listed a branch created by `POST /customers` — those are
+  created with both set to 0.
+
 - 20 Sep: Run on PHP 7.4 with a green test suite. FrontAccounting connects with
   `sql_mode=STRICT_ALL_TABLES`, which rejects the `''` this module passed to the
   integer and date columns behind customers, dimensions, stock adjustments and

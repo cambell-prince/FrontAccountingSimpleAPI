@@ -974,6 +974,138 @@
                 "deprecated": false
             }
         },
+        "/payments": {
+            "post": {
+                "tags": [
+                    "payments"
+                ],
+                "summary": "Record a customer payment",
+                "description": "Records a payment against a customer branch and bank account, optionally allocating it to one existing document.",
+                "operationId": "addPayment",
+                "produces": [
+                    "application/json"
+                ],
+                "parameters": [
+                    {
+                        "name": "customer_id",
+                        "in": "formData",
+                        "description": "Customer to credit",
+                        "required": true,
+                        "type": "integer"
+                    },
+                    {
+                        "name": "branch_id",
+                        "in": "formData",
+                        "description": "Branch of that customer",
+                        "required": true,
+                        "type": "integer"
+                    },
+                    {
+                        "name": "bank_account",
+                        "in": "formData",
+                        "description": "Bank account receiving the money",
+                        "required": true,
+                        "type": "integer"
+                    },
+                    {
+                        "name": "amount",
+                        "in": "formData",
+                        "description": "Amount received, greater than zero",
+                        "required": true,
+                        "type": "number"
+                    },
+                    {
+                        "name": "trans_date",
+                        "in": "formData",
+                        "description": "ISO8601 date (e.g. 2013-12-31). Defaults to today, and must fall inside an open fiscal year.",
+                        "required": false,
+                        "type": "string"
+                    },
+                    {
+                        "name": "discount",
+                        "in": "formData",
+                        "description": "Discount given, defaults to 0",
+                        "required": false,
+                        "type": "number"
+                    },
+                    {
+                        "name": "memo",
+                        "in": "formData",
+                        "required": false,
+                        "type": "string"
+                    },
+                    {
+                        "name": "ref",
+                        "in": "formData",
+                        "description": "Defaults to the next customer payment reference",
+                        "required": false,
+                        "type": "string"
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Payment recorded",
+                        "schema": {
+                            "$ref": "#/definitions/Payment"
+                        }
+                    },
+                    "400": {
+                        "description": "A value in the request cannot be used"
+                    },
+                    "412": {
+                        "description": "A required value is missing"
+                    }
+                },
+                "deprecated": false
+            }
+        },
+        "/payments/{id}": {
+            "delete": {
+                "tags": [
+                    "payments"
+                ],
+                "summary": "Void a customer payment",
+                "description": "Reverses the payment through FrontAccounting's void_transaction(), which removes its ledger and bank entries and releases anything it was allocated to. The transaction number is kept, as voiding does in FrontAccounting.",
+                "operationId": "voidPayment",
+                "produces": [
+                    "application/json"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Transaction number of the payment",
+                        "required": true,
+                        "type": "integer"
+                    },
+                    {
+                        "name": "date",
+                        "in": "formData",
+                        "description": "ISO8601 date to void on. Defaults to the payment's own date, which is always inside a fiscal year.",
+                        "required": false,
+                        "type": "string"
+                    },
+                    {
+                        "name": "memo",
+                        "in": "formData",
+                        "required": false,
+                        "type": "string"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Payment voided"
+                    },
+                    "400": {
+                        "description": "The payment cannot be voided"
+                    },
+                    "404": {
+                        "description": "No such payment"
+                    }
+                },
+                "deprecated": false
+            }
+        },
         "/sales": {
             "get": {
                 "tags": [
@@ -1316,6 +1448,22 @@
             },
             "type": "object",
             "format": ""
+        },
+        "Payment": {
+            "description": "A customer payment",
+            "properties": {
+                "id": {
+                    "description": "Transaction number of the payment",
+                    "type": "integer",
+                    "example": "1"
+                },
+                "reference": {
+                    "description": "Human readable reference, assigned automatically when not supplied",
+                    "type": "string",
+                    "example": "1"
+                }
+            },
+            "type": "object"
         },
         "Sale": {
             "description": "A Sale",

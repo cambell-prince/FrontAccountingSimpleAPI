@@ -35,6 +35,7 @@ The following API endpoints have been implemented:
 - GL Accounts
 - GL Account Types.
 - Journal
+- Payments (customer payments, optionally allocated to a document, and voiding them)
 
 Some of them have not been tested yet so be carefull.
 
