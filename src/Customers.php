@@ -236,11 +236,14 @@ class Customers
             "b.inactive " .
             " FROM " . TB_PREF . "cust_branch b " .
             "LEFT JOIN " . TB_PREF . "crm_contacts c ON c.entity_id=b.branch_code AND c.type='cust_branch' AND c.action='general' " .
-            "LEFT JOIN " . TB_PREF . "crm_persons p on c.person_id=p.id," . TB_PREF . "areas a, " . TB_PREF . "salesman s, " . TB_PREF . "tax_groups t
-			WHERE b.tax_group_id=t.id
-			AND b.area=a.area_code
-			AND b.salesman=s.salesman_code
-			AND b.debtor_no = " . db_escape($id) . " AND !b.inactive GROUP BY b.branch_code ORDER BY branch_ref";
+            "LEFT JOIN " . TB_PREF . "crm_persons p on c.person_id=p.id " .
+            // Left joined, not inner: salesman and area are optional, and this
+            // endpoint creates branches with both set to 0. Inner joining them
+            // meant no branch created through the API was ever listed by it.
+            "LEFT JOIN " . TB_PREF . "areas a ON b.area = a.area_code " .
+            "LEFT JOIN " . TB_PREF . "salesman s ON b.salesman = s.salesman_code " .
+            "LEFT JOIN " . TB_PREF . "tax_groups t ON b.tax_group_id = t.id
+			WHERE b.debtor_no = " . db_escape($id) . " AND !b.inactive GROUP BY b.branch_code ORDER BY branch_ref";
 
         $result = db_query($sql, "Cannot Get Customer Branches");
 

@@ -536,6 +536,10 @@ $rest->group('/payments', function () use ($rest) {
     $rest->post('/', function () use ($rest) {
         $rest->payments->post($rest);
     });
+    // Void a customer payment
+    $rest->delete('/:id', function ($id) use ($rest) {
+        $rest->payments->delete($rest, $id);
+    });
 });
 // ------------------------------ Payments ------------------------------
 
