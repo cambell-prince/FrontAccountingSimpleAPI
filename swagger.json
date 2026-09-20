@@ -10,7 +10,7 @@
             "name": "GPL V2.0",
             "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html"
         },
-        "version": "2.4-1.6"
+        "version": "2.4-1.7"
     },
     "host": "demo.saygoweb.com",
     "basePath": "/frontaccounting/modules/api",
@@ -717,6 +717,67 @@
                 "deprecated": false
             }
         },
+        "/glqueries/trialbalance/{start}/{end}/": {
+            "get": {
+                "tags": [
+                    "glquery/trialbalance"
+                ],
+                "summary": "Query the GL Trial Balance",
+                "operationId": "queryTrialBalance",
+                "produces": [
+                    "application/json"
+                ],
+                "parameters": [
+                    {
+                        "name": "start",
+                        "in": "path",
+                        "description": "Start date of the period",
+                        "required": true,
+                        "type": "date"
+                    },
+                    {
+                        "name": "end",
+                        "in": "path",
+                        "description": "End date of the period",
+                        "required": true,
+                        "type": "date"
+                    },
+                    {
+                        "name": "dimension1",
+                        "in": "path",
+                        "description": "Dimension 1",
+                        "required": false,
+                        "type": "string"
+                    },
+                    {
+                        "name": "dimension2",
+                        "in": "path",
+                        "description": "Dimension 2",
+                        "required": false,
+                        "type": "string"
+                    },
+                    {
+                        "name": "nozeros",
+                        "in": "path",
+                        "description": "Present to ommit accounts with zero balances from the result",
+                        "required": false,
+                        "type": "bool"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successful operation",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/GLTrialBalanceLine"
+                            }
+                        }
+                    }
+                },
+                "deprecated": false
+            }
+        },
         "/journal": {
             "get": {
                 "tags": [
@@ -908,6 +969,138 @@
                             },
                             "type": "object"
                         }
+                    }
+                },
+                "deprecated": false
+            }
+        },
+        "/payments": {
+            "post": {
+                "tags": [
+                    "payments"
+                ],
+                "summary": "Record a customer payment",
+                "description": "Records a payment against a customer branch and bank account, optionally allocating it to one existing document.",
+                "operationId": "addPayment",
+                "produces": [
+                    "application/json"
+                ],
+                "parameters": [
+                    {
+                        "name": "customer_id",
+                        "in": "formData",
+                        "description": "Customer to credit",
+                        "required": true,
+                        "type": "integer"
+                    },
+                    {
+                        "name": "branch_id",
+                        "in": "formData",
+                        "description": "Branch of that customer",
+                        "required": true,
+                        "type": "integer"
+                    },
+                    {
+                        "name": "bank_account",
+                        "in": "formData",
+                        "description": "Bank account receiving the money",
+                        "required": true,
+                        "type": "integer"
+                    },
+                    {
+                        "name": "amount",
+                        "in": "formData",
+                        "description": "Amount received, greater than zero",
+                        "required": true,
+                        "type": "number"
+                    },
+                    {
+                        "name": "trans_date",
+                        "in": "formData",
+                        "description": "ISO8601 date (e.g. 2013-12-31). Defaults to today, and must fall inside an open fiscal year.",
+                        "required": false,
+                        "type": "string"
+                    },
+                    {
+                        "name": "discount",
+                        "in": "formData",
+                        "description": "Discount given, defaults to 0",
+                        "required": false,
+                        "type": "number"
+                    },
+                    {
+                        "name": "memo",
+                        "in": "formData",
+                        "required": false,
+                        "type": "string"
+                    },
+                    {
+                        "name": "ref",
+                        "in": "formData",
+                        "description": "Defaults to the next customer payment reference",
+                        "required": false,
+                        "type": "string"
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Payment recorded",
+                        "schema": {
+                            "$ref": "#/definitions/Payment"
+                        }
+                    },
+                    "400": {
+                        "description": "A value in the request cannot be used"
+                    },
+                    "412": {
+                        "description": "A required value is missing"
+                    }
+                },
+                "deprecated": false
+            }
+        },
+        "/payments/{id}": {
+            "delete": {
+                "tags": [
+                    "payments"
+                ],
+                "summary": "Void a customer payment",
+                "description": "Reverses the payment through FrontAccounting's void_transaction(), which removes its ledger and bank entries and releases anything it was allocated to. The transaction number is kept, as voiding does in FrontAccounting.",
+                "operationId": "voidPayment",
+                "produces": [
+                    "application/json"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Transaction number of the payment",
+                        "required": true,
+                        "type": "integer"
+                    },
+                    {
+                        "name": "date",
+                        "in": "formData",
+                        "description": "ISO8601 date to void on. Defaults to the payment's own date, which is always inside a fiscal year.",
+                        "required": false,
+                        "type": "string"
+                    },
+                    {
+                        "name": "memo",
+                        "in": "formData",
+                        "required": false,
+                        "type": "string"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Payment voided"
+                    },
+                    "400": {
+                        "description": "The payment cannot be voided"
+                    },
+                    "404": {
+                        "description": "No such payment"
                     }
                 },
                 "deprecated": false
@@ -1161,6 +1354,53 @@
             "type": "object",
             "format": ""
         },
+        "GLTrialBalanceLine": {
+            "description": "A GLTrialBalance Line Entry",
+            "properties": {
+                "account_code": {
+                    "description": "Unique short human readable id used to reference a GLAccount",
+                    "type": "string",
+                    "example": "1060"
+                },
+                "account_name": {
+                    "description": "A longer name for the account",
+                    "type": "string",
+                    "example": "My Bank Savings Account"
+                },
+                "start_debit": {
+                    "description": "Opening debit balance at the start of the period",
+                    "type": "float",
+                    "example": "10.00"
+                },
+                "start_credit": {
+                    "description": "Opening credit balance at the start of the period",
+                    "type": "float",
+                    "example": "10.00"
+                },
+                "period_debit": {
+                    "description": "Period debit balance",
+                    "type": "float",
+                    "example": "10.00"
+                },
+                "period_credit": {
+                    "description": "Period credit balance",
+                    "type": "float",
+                    "example": "10.00"
+                },
+                "end_debit": {
+                    "description": "Closing debit balance at the end of the period",
+                    "type": "float",
+                    "example": "10.00"
+                },
+                "end_credit": {
+                    "description": "Closing credit balance at the end of the period",
+                    "type": "float",
+                    "example": "10.00"
+                }
+            },
+            "type": "object",
+            "format": ""
+        },
         "JournalEntry": {
             "description": "A single Journal Entry",
             "properties": {
@@ -1209,6 +1449,22 @@
             "type": "object",
             "format": ""
         },
+        "Payment": {
+            "description": "A customer payment",
+            "properties": {
+                "id": {
+                    "description": "Transaction number of the payment",
+                    "type": "integer",
+                    "example": "1"
+                },
+                "reference": {
+                    "description": "Human readable reference, assigned automatically when not supplied",
+                    "type": "string",
+                    "example": "1"
+                }
+            },
+            "type": "object"
+        },
         "Sale": {
             "description": "A Sale",
             "properties": {
@@ -1224,6 +1480,6 @@
     },
     "externalDocs": {
         "description": "Find out more about Front Accounting Simple API",
-        "url": "https://github.com/cambell-prince/FrontAccountingSimpleAPI"
+        "url": "https://github.com/andresamayadiaz/FrontAccountingSimpleAPI"
     }
 }

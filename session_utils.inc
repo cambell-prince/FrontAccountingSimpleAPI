@@ -307,22 +307,6 @@ function set_page_security($value=null, $trans = array(), $gtrans = array())
 	}
 }
 
-//-----------------------------------------------------------------------------
-//	Removing magic quotes from nested arrays/variables
-//
-function strip_quotes($data)
-{
-	if(get_magic_quotes_gpc()) {
-		if(is_array($data)) {
-			foreach($data as $k => $v) {
-				$data[$k] = strip_quotes($data[$k]);
-			}
-		} else
-			return stripslashes($data);
-	}
-	return $data;
-}
-
 /*
 	htmlspecialchars does not support certain encodings.
 	ISO-8859-2 fortunately has the same special characters positions as 

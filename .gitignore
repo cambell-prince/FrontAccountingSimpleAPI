@@ -6,3 +6,7 @@ _frontaccounting
 *.zip
 *.tgz
 public/
+docker/.env
+
+# phpmake run logs
+log/

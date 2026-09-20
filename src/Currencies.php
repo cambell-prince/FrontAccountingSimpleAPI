@@ -39,7 +39,7 @@ class Currencies
         $date = date2sql(Today());
 
         $sql = "SELECT rate_buy, max(date_) as date_ FROM "
-            . TB_PREF . "exchange_rates WHERE curr_code = " . db_escape($id)
+            . TB_PREF . "exchange_rates WHERE curr_code = " . db_escape($currencyCode)
             . " AND date_ <= '$date' GROUP BY rate_buy ORDER BY date_ Desc LIMIT 1";
 
         $result = db_query($sql, "could not query exchange rates");
@@ -47,7 +47,7 @@ class Currencies
         if (db_num_rows($result) == 0) {
             // no stored exchange rate, just return 0
             api_success_response(json_encode(array(
-                'curr_abrev' => $id,
+                'curr_abrev' => $currencyCode,
                 'rate' => 0,
                 'date' => $date
             )));
@@ -56,7 +56,7 @@ class Currencies
         $myrow = db_fetch_row($result);
 
         api_success_response(json_encode(array(
-            'curr_abrev' => $id,
+            'curr_abrev' => $currencyCode,
             'rate' => $myrow[0],
             'date' => $myrow[1]
         )));

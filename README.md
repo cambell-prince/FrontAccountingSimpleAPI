@@ -1,7 +1,5 @@
 # Simple API for Front Accounting
 
-[![Build Status](https://travis-ci.org/cambell-prince/FrontAccountingSimpleAPI.svg?branch=master)](https://travis-ci.org/cambell-prince/FrontAccountingSimpleAPI)
-
 I needed some basic integration functions to another software and decided to create this REST API and contribute to the Front Accounting community. I hope you find it usefull!
 
 ## Installation
@@ -37,8 +35,50 @@ The following API endpoints have been implemented:
 - GL Accounts
 - GL Account Types.
 - Journal
+- Payments (customer payments, optionally allocated to a document, and voiding them)
 
 Some of them have not been tested yet so be carefull.
+
+## Development
+
+Everything runs in docker — a FrontAccounting install with this module plugged
+into it, built from scratch, so there is nothing to install on your machine but
+docker itself:
+
+    docker/fa-api init      # pick host ports that are free here
+    docker/fa-api up        # build, boot, seed the database
+    docker/fa-api test      # the PHPUnit suite
+    docker/fa-api lint      # php -l, then phpcs PSR-2
+    docker/fa-api analyze   # PHPStan
+
+See [docker/README.md](docker/README.md). The same commands run on GitHub
+Actions, so a green run locally is a green run there.
+
+The tasks themselves are composer scripts, so they work anywhere a PHP and a
+FrontAccounting install are already set up:
+
+| command | effect |
+| --- | --- |
+| `composer test` | PHPUnit (needs a server and a seeded `fa_test` database) |
+| `composer lint` | `php -l` over every `.php` and `.inc` file |
+| `composer cs:check` / `cs:fix` | PSR-2 via phpcs / phpcbf (`phpcs.xml`) |
+| `composer analyze` | PHPStan (`phpstan.neon`) |
+| `composer quality` | lint, then analyze |
+| `composer ci` | quality, then test |
+
+Multi-step builds — regenerating `swagger.json`, building the release archives —
+are [phpmake](https://github.com/saygoweb/phpmake) targets in `makefile.json`:
+
+| command | effect |
+| --- | --- |
+| `make.phar docs-json` | regenerate `swagger.json` from the `@SWG` annotations |
+| `make.phar docs` | that, then the static HTML (needs a global `spectacle`) |
+| `make.phar package` | the release `.zip` and `.tgz`, built against `--no-dev` vendor |
+
+`make.phar` is on PATH inside the docker image (`docker/fa-api make <target>`).
+To install it on the host, clone
+[saygoweb/phpmake](https://github.com/saygoweb/phpmake) and run `php make.php
+install`.
 
 ## How to Help
 

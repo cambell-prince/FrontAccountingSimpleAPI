@@ -38,7 +38,10 @@ Free software under GNU GPL
  *   @SWG\Info(
  *     version="2.4-1.7",
  *     title="Front Accounting Simple API",
- *     description="This is a simple REST API as a Front Accounting module [https://github.com/andresamayadiaz/FrontAccountingSimpleAPI](https://github.com/andresamayadiaz/FrontAccountingSimpleAPI).",
+ *     description="This is a simple REST API as a Front Accounting module [https://github.com/cambell-prince/FrontAccountingSimpleAPI](https://github.com/cambell-prince/FrontAccountingSimpleAPI).",
+ *     @SWG\Contact(
+ *       email="cambell.prince@gmail.com"
+ *     ),
  *     @SWG\License(
  *       name="GPL V2.0",
  *       url="https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html"
@@ -532,6 +535,22 @@ $rest->group('/journal', function () use ($rest) {
     });
 });
 // ------------------------------ Journal -------------------------------
+
+// ------------------------------ Payments ------------------------------
+$rest->container->singleton('payments', function () {
+    return new \FAAPI\Payments();
+});
+$rest->group('/payments', function () use ($rest) {
+    // Add a customer payment, optionally allocated to one document
+    $rest->post('/', function () use ($rest) {
+        $rest->payments->post($rest);
+    });
+    // Void a customer payment
+    $rest->delete('/:id', function ($id) use ($rest) {
+        $rest->payments->delete($rest, $id);
+    });
+});
+// ------------------------------ Payments ------------------------------
 
 // Init API
 $rest->run();

@@ -1,0 +1,43 @@
+parameters:
+    # Level 0 is clean and is what `composer analyze` gates on. It is not the
+    # ceiling: `vendor/bin/phpstan analyse --level=1` reports 12 findings today,
+    # nearly all of them db_fetch()/db_fetch_assoc() called with a second
+    # argument the function has never taken. One is worth a proper look —
+    # src/Journal.php calls get_sql_for_journal_inquiry() with 9 arguments where
+    # FrontAccounting now declares 3 to 7, so the extra filters are silently
+    # dropped. Raise the level once those are dealt with.
+    level: 0
+
+    # FrontAccounting is a .inc codebase. Without this, scanDirectories below
+    # finds almost none of it and every db_query() is "function not found".
+    fileExtensions:
+        - php
+        - inc
+
+    paths:
+        - src
+
+    # Not analysed, only read for the symbols they declare. index.php defines
+    # RESULTS_PER_PAGE, config_api.php defines API_ROOT and FA_ROOT, and util.php
+    # holds the api_* helpers — all included at runtime rather than autoloaded.
+    scanFiles:
+        - index.php
+        - config_api.php
+        - util.php
+        - inventory.inc
+        - sales.inc
+
+    # FrontAccounting itself, two directories up: this module lives at
+    # modules/api inside an FA tree, and that is equally true inside the docker
+    # stack, where the checkout is bind-mounted at /var/www/html/modules/api.
+    # Only the areas this module actually calls into are listed, so a missing
+    # directory is a real signal rather than noise.
+    scanDirectories:
+        - ../../includes
+        - ../../admin
+        - ../../dimensions
+        - ../../gl
+        - ../../inventory
+        - ../../purchasing
+        - ../../sales
+        - ../../taxes

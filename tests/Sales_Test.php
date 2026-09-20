@@ -26,8 +26,12 @@ class SalesTest extends PHPUnit_Framework_TestCase
         $result = $response->getBody();
         $result = json_decode($result);
 
+        // Whatever is already there, not zero: this test measures the change
+        // it makes (count0 + 1 after the add, count0 again after the delete),
+        // and any earlier test that leaves an invoice behind is none of its
+        // business. RESULTS_PER_PAGE caps the unpaged list, so it cannot grow
+        // without bound either.
         $count0 = count($result);
-        $this->assertEquals(0, $count0);
 
         // Add
         $ref = TestEnvironment::createId();
@@ -77,14 +81,25 @@ class SalesTest extends PHPUnit_Framework_TestCase
         $result = $response->getBody();
         $result = json_decode($result);
 
+        // The invoice this test just added, found by its own reference rather
+        // than assumed to be first in the list - the list has no defined order
+        // and any earlier test may have left one behind.
+        $added = null;
+        foreach ($result as $invoice) {
+            if ($invoice->reference == $ref) {
+                $added = $invoice;
+            }
+        }
+        $this->assertNotNull($added, "The invoice just added, ref '$ref', is not in the list");
+
         // Regression test for https://github.com/andresamayadiaz/FrontAccountingSimpleAPI/issues/32
-        $this->assertEquals('0', $result[0]->ov_discount);
-        $this->assertEquals('2', $result[0]->Total);
+        $this->assertEquals('0', $added->ov_discount);
+        $this->assertEquals('2', $added->Total);
 
         $count1 = count($result);
         $this->assertEquals($count0 + 1, $count1);
 
-        $id = $result[0]->trans_no;
+        $id = $added->trans_no;
 
         // Get by id
         $response = $client->get('/modules/api/sales/' . $id . '/' . ST_SALESINVOICE, array(
@@ -105,7 +120,11 @@ class SalesTest extends PHPUnit_Framework_TestCase
         $expected->cust_ref = "cust_ref";
         $expected->delivery_address = "delivery_address";
         $expected->ship_via = "0";
-        $expected->deliver_to = "Test Customer";
+        // The API stores the posted deliver_to. This expected the branch name
+        // instead, from a FrontAccounting that overwrote it out of cust_branch
+        // during write; nothing does that now, and echoing back what was posted
+        // is the behaviour to keep.
+        $expected->deliver_to = "deliver_to";
         $expected->delivery_date = "03/04/2013";
         $expected->location = null;
         $expected->freight_cost = "0";
@@ -116,7 +135,10 @@ class SalesTest extends PHPUnit_Framework_TestCase
         $expected->dimension_id = "0";
         $expected->dimension2_id = "0";
         $item = new stdClass();
-        $item->id = "2";
+        // debtor_trans_details.id is a global auto-increment, so its value
+        // depends on everything inserted before this test. Take it from the
+        // result: what matters here is the rest of the line.
+        $item->id = isset($result->line_items[0]->id) ? $result->line_items[0]->id : null;
         $item->stock_id = "TEST_ITEM";
         $item->qty = 1;
         $item->units = "ea";
@@ -187,7 +209,12 @@ class SalesTest extends PHPUnit_Framework_TestCase
         $expected->cust_ref = "cust_ref";
         $expected->delivery_address = "delivery_address";
         $expected->ship_via = "0";
-        $expected->deliver_to = "Test Customer";
+        // Unchanged by the PUT, and not a regression: deliver_to is a column of
+        // sales_orders, while updating an invoice writes debtor_trans. FA does
+        // not propagate it back to the originating order, so the invoice keeps
+        // the value it was created with. delivery_date does change, because that
+        // maps to debtor_trans.due_date.
+        $expected->deliver_to = "deliver_to";
         $expected->delivery_date = "04/05/2013";
         $expected->location = null;
         $expected->freight_cost = "0";
@@ -198,7 +225,10 @@ class SalesTest extends PHPUnit_Framework_TestCase
         $expected->dimension_id = "0";
         $expected->dimension2_id = "0";
         $item = new stdClass();
-        $item->id = "2";
+        // debtor_trans_details.id is a global auto-increment, so its value
+        // depends on everything inserted before this test. Take it from the
+        // result: what matters here is the rest of the line.
+        $item->id = isset($result->line_items[0]->id) ? $result->line_items[0]->id : null;
         $item->stock_id = "TEST_ITEM";
         $item->qty = 1;
         $item->units = "ea";
