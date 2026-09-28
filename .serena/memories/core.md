@@ -67,6 +67,6 @@ itemcosts→`InventoryCosts`, sales→`Sales`, dimensions→`Dimensions`, journa
 - Running the server, tests, docs and packaging: `mem:suggested_commands`
 - Code style, the controller/route/Swagger-annotation pattern: `mem:conventions`
 - Test harness, fixture db and the running-server requirement: `mem:testing`
-- The docker stack (`docker/fa-api`) that builds FA around the module, and CI: `mem:docker`
+- CI: `tools/ci.sh`, run inside the shared FrontAccounting CI image: `mem:ci`
 - What to verify before calling a change done: `mem:task_completion`
 - The in-flight Slim 2 → Slim 4 / PHP 8 port on `feature/php8`: `mem:php8_migration`

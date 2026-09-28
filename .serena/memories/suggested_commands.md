@@ -1,23 +1,19 @@
 # Commands
 
-Everything runs through the docker stack ([[docker]]); the tasks themselves are
-composer scripts, so they also work on a host that already has PHP and a
-FrontAccounting install.
+Everything runs through the shared FrontAccounting CI image ([[ci]]); the
+tasks themselves are composer scripts, so they also work on a host that
+already has PHP and a FrontAccounting install.
 
-## Docker
+## CI image (`../frontaccounting/docker/ci/plugin-test.sh`)
 
 | command | effect |
 |---|---|
-| `docker/fa-api init` | write `docker/.env` with free host ports (once) |
-| `docker/fa-api up` | build, boot, seed `fa_test`, `composer install` |
-| `docker/fa-api test [args]` | PHPUnit (`--filter X` to narrow) |
-| `docker/fa-api lint [--strict]` | `php -l`, then phpcs PSR-2 (advisory) |
-| `docker/fa-api analyze` | PHPStan |
-| `docker/fa-api ci` | up --build + lint + analyze + test, as GitHub Actions runs it |
-| `docker/fa-api make <target>` | a phpmake target: `docs-json`, `docs`, `package`, `clean` |
-| `docker/fa-api logs errors` | FA's `tmp/errors.log` — first stop for a 200 with no JSON |
-| `docker/fa-api db reset` | reload the fixture |
-| `docker/fa-api shell` | bash in the module directory |
+| `plugin-test.sh --name api --no-activate --setup 'composer install --no-interaction --no-progress' . -- sh tools/ci.sh` | the full CI run, locally |
+| `... -- sh tools/ci.sh` with `--keep` | leaves the container running, FA on a printed localhost port |
+| `... -- composer run test -- --filter X` | narrow phpunit to one test, inside the image |
+
+`tools/ci.sh` runs lint, phpcs (advisory), analyze, then phpunit. See [[ci]]
+for the full option list (`--fa`, `--php`, `--dataset`, `--with`, ...).
 
 ## Composer scripts (what those delegate to)
 

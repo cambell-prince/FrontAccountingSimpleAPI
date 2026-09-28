@@ -11,8 +11,8 @@
   `$app->halt()`, `:param` routes. Do not copy Slim 3/4 patterns into master.
 - **Composer** with PSR-4 `FAAPI\` → `src/`, and **composer scripts as the task
   runner**: `test`, `lint`, `cs:check`, `cs:fix`, `analyze`, `quality`, `ci`.
-  `vendor/` is gitignored and owned by the docker stack, which reinstalls it
-  from the lock on every `up`.
+  `vendor/` is gitignored; `--setup 'composer install ...'` reinstalls it from
+  the lock on every CI run.
 - **Dev deps**: `phpunit/phpunit ^9.6`, `guzzlehttp/guzzle ^7.5`,
   `squizlabs/php_codesniffer ^3.7`, `phpstan/phpstan ^1.10`. The 4.2/6.3
   versions were both blocked by composer security advisories and neither
@@ -37,5 +37,6 @@
   2026-09-20. The one thing that still wants node is `spectacle`, for rendering
   `swagger.json` into the `gh-pages` HTML, and it is expected globally on the
   host at release time.
-- **CI** — `.github/workflows/ci.yml`, driving `docker/fa-api` (see [[docker]]).
+- **CI** — `.github/workflows/ci.yml`, running `tools/ci.sh` in the shared
+  FrontAccounting CI image (see [[ci]]).
 - **Xdebug** — `.vscode/launch.json` listens on 9003.

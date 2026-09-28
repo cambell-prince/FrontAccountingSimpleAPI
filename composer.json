@@ -41,13 +41,13 @@
         "package": "make.phar package"
     },
     "scripts-descriptions": {
-        "test": "Run the PHPUnit suite. Needs a FrontAccounting install serving this module and a seeded fa_test database \u2014 docker/fa-api test does both.",
+        "test": "Run the PHPUnit suite. Needs a FrontAccounting install serving this module and a seeded fa_test database \u2014 tools/ci.sh, run in the FrontAccounting CI image, provides both.",
         "lint": "php -l over every PHP and .inc file in the module.",
-        "cs:check": "Check src/ and tests/ against PSR-2 (phpcs.xml). Not yet clean, so it is deliberately not part of quality/ci; docker/fa-api lint reports it without failing.",
+        "cs:check": "Check src/ and tests/ against PSR-2 (phpcs.xml). Not yet clean, so it is deliberately not part of quality/ci; tools/ci.sh reports it without failing.",
         "cs:fix": "Fix what phpcbf can fix automatically.",
         "analyze": "Run PHPStan over src/ (phpstan.neon).",
         "quality": "lint, then analyze \u2014 the two static gates that are clean today.",
-        "ci": "quality, then test \u2014 the same gates GitHub Actions runs through docker/fa-api.",
+        "ci": "quality, then test \u2014 the same gates tools/ci.sh runs in CI.",
         "docs": "Regenerate swagger.json and the static docs (needs make.phar; see README).",
         "package": "Build the release zip and tarball (needs make.phar; see README)."
     }

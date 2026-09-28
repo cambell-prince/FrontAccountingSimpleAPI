@@ -41,18 +41,15 @@ Some of them have not been tested yet so be carefull.
 
 ## Development
 
-Everything runs in docker — a FrontAccounting install with this module plugged
-into it, built from scratch, so there is nothing to install on your machine but
-docker itself:
+CI runs `tools/ci.sh` in the FrontAccounting CI image
+([`docker/ci` in cambell-prince/frontaccounting](https://github.com/cambell-prince/frontaccounting/tree/master-cp/docker/ci)):
+FrontAccounting plus this module, built from scratch, so there is nothing to
+install on your machine but docker itself. Locally, with that repository
+checked out beside this one:
 
-    docker/fa-api init      # pick host ports that are free here
-    docker/fa-api up        # build, boot, seed the database
-    docker/fa-api test      # the PHPUnit suite
-    docker/fa-api lint      # php -l, then phpcs PSR-2
-    docker/fa-api analyze   # PHPStan
-
-See [docker/README.md](docker/README.md). The same commands run on GitHub
-Actions, so a green run locally is a green run there.
+    ../frontaccounting/docker/ci/plugin-test.sh --name api --no-activate \
+        --setup 'composer install --no-interaction --no-progress' \
+        . -- sh tools/ci.sh
 
 The tasks themselves are composer scripts, so they work anywhere a PHP and a
 FrontAccounting install are already set up:
@@ -75,8 +72,7 @@ are [phpmake](https://github.com/saygoweb/phpmake) targets in `makefile.json`:
 | `make.phar docs` | that, then the static HTML (needs a global `spectacle`) |
 | `make.phar package` | the release `.zip` and `.tgz`, built against `--no-dev` vendor |
 
-`make.phar` is on PATH inside the docker image (`docker/fa-api make <target>`).
-To install it on the host, clone
+To install `make.phar`, clone
 [saygoweb/phpmake](https://github.com/saygoweb/phpmake) and run `php make.php
 install`.
 
