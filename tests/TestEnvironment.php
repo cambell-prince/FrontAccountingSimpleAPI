@@ -15,7 +15,7 @@ class TestEnvironment
     public static function client()
     {
         return new Client(array(
-            'base_uri' => 'http://localhost:8000'
+            'base_uri' => getenv('FA_URL') ?: 'http://localhost:8000'
         ), array(
             'request.options' => array(
                 'exceptions' => false

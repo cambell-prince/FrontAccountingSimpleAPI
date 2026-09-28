@@ -1,5 +1,9 @@
 name: CI
 
+# Runs tools/ci.sh in the FrontAccounting CI image (cambell-prince/frontaccounting
+# docker/ci), with this checkout at modules/api. api is not a FrontAccounting
+# extension, so it is mounted, not activated.
+
 on:
   push:
     branches:
@@ -9,62 +13,26 @@ on:
       - 'fix/**'
       - 'bug/**'
       - 'issue/**'
+      - 'ci/**'
   pull_request:
   workflow_dispatch:
 
-# A second push to the same branch makes the first run's answer irrelevant, and
-# each run builds an image and a database.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
-    name: PHP ${{ matrix.php }}
-    runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       matrix:
-        # Both gate. 7.4 is the oldest the module supports and what
-        # composer.json resolves the lock against; 8.3 is current. slug because
-        # a compose project name cannot contain a dot.
-        include:
-          - php: '7.4'
-            slug: '74'
-          - php: '8.3'
-            slug: '83'
-
-    env:
-      PHP_VERSION: ${{ matrix.php }}
-      # The workflow runs one stack per job; fixed ports are free on a runner.
-      HTTP_PORT: '8090'
-      DB_PORT: '3309'
-      COMPOSE_PROJECT_NAME: fa-api-ci-${{ matrix.slug }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      # Everything below goes through the same CLI a developer uses, so a green
-      # run here means `docker/fa-api ci` is green on a laptop too.
-      - name: Build and boot the stack
-        run: docker/fa-api up --build
-
-      - name: Lint
-        run: docker/fa-api lint
-
-      - name: Analyze
-        run: docker/fa-api analyze
-
-      - name: Test
-        run: docker/fa-api test
-
-      - name: Container logs
-        if: failure()
-        run: |
-          docker/fa-api logs app --tail 300
-          docker/fa-api logs errors || true
-
-      - name: Tear down
-        if: always()
-        run: docker/fa-api destroy --yes
+        fa: [upstream, cp]
+        php: ['7.4', '8.3']
+    uses: cambell-prince/frontaccounting/.github/workflows/plugin-test.yml@master-cp
+    with:
+      fa: ${{ matrix.fa }}
+      php: ${{ matrix.php }}
+      name: api
+      activate: false
+      setup: composer install --no-interaction --no-progress
+      test: sh tools/ci.sh

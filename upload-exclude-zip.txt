@@ -10,7 +10,6 @@
 _frontaccounting
 node_modules/*
 log/*
-docker/*
 makefile.json
 composer.*
 phpcs.xml
